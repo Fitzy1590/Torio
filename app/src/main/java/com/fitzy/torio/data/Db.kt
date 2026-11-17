@@ -102,6 +102,9 @@ class Settings(ctx: Context) {
     var aioUrl: String
         get() = sp.getString("aio_url", "") ?: ""
         set(v) = sp.edit().putString("aio_url", v.trim()).apply()
+    var abbUrl: String
+        get() = sp.getString("abb_url", "https://audiobookbay.lu") ?: "https://audiobookbay.lu"
+        set(v) = sp.edit().putString("abb_url", v.trim().trimEnd('/')).apply()
     var speed: Float
         get() = sp.getFloat("speed", 1f)
         set(v) = sp.edit().putFloat("speed", v).apply()

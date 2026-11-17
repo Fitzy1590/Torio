@@ -27,7 +27,7 @@ import com.fitzy.torio.net.Provider
 import com.fitzy.torio.net.SourceResult
 import com.fitzy.torio.net.formatSize
 
-private enum class Tab(val label: String) { Search("Search"), Library("Library"), Player("Player"), Settings("Settings") }
+private enum class Tab(val label: String) { Search("Search"), Browse("Browse"), Library("Library"), Player("Player"), Settings("Settings") }
 
 @Composable
 fun TorioRoot(vm: TorioViewModel) {
@@ -42,7 +42,7 @@ fun TorioRoot(vm: TorioViewModel) {
                     NavigationBar {
                         Tab.entries.forEach { t ->
                             NavigationBarItem(selected = tab == t, onClick = { tab = t },
-                                icon = { Icon(when (t) { Tab.Search -> Icons.Default.Search; Tab.Library -> Icons.Default.LibraryBooks
+                                icon = { Icon(when (t) { Tab.Search -> Icons.Default.Search; Tab.Browse -> Icons.Default.Public; Tab.Library -> Icons.Default.LibraryBooks
                                     Tab.Player -> Icons.Default.Headphones; Tab.Settings -> Icons.Default.Settings }, t.label) },
                                 label = { Text(t.label) })
                         }
@@ -53,6 +53,7 @@ fun TorioRoot(vm: TorioViewModel) {
             Box(Modifier.padding(pad).fillMaxSize()) {
                 when (tab) {
                     Tab.Search -> SearchScreen(vm) { tab = Tab.Player }
+                    Tab.Browse -> BrowseScreen(vm)
                     Tab.Library -> LibraryScreen(vm) { tab = Tab.Player }
                     Tab.Player -> PlayerScreen(vm)
                     Tab.Settings -> SettingsScreen(vm)
@@ -210,13 +211,61 @@ private fun SettingsScreen(vm: TorioViewModel) {
     val s = vm.settings
     var key by remember { mutableStateOf(s.torboxKey) }
     var aio by remember { mutableStateOf(s.aioUrl) }
+    var abb by remember { mutableStateOf(s.abbUrl) }
     var auto by remember { mutableStateOf(s.autoResume) }
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(key, { key = it; s.torboxKey = it }, label = { Text("TorBox API key") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
         OutlinedTextField(aio, { aio = it; s.aioUrl = it }, label = { Text("AIOStreams manifest URL (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(abb, { abb = it; s.abbUrl = it }, label = { Text("AudiobookBay address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Auto-resume on launch", Modifier.weight(1f)); Switch(auto, { auto = it; s.autoResume = it })
         }
+    }
+}
+
+@android.annotation.SuppressLint("SetJavaScriptEnabled")
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BrowseScreen(vm: TorioViewModel) {
+    val sites = listOf(
+        "AudiobookBay" to vm.settings.abbUrl,
+        "LibriVox" to "https://librivox.org",
+        "Internet Archive" to "https://archive.org/details/audiobooks",
+        "Loyal Books" to "https://www.loyalbooks.com",
+    )
+    var url by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var web by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    androidx.activity.compose.BackHandler(url != null) { if (web?.canGoBack() == true) web?.goBack() else url = null }
+    if (url == null) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Sites", style = MaterialTheme.typography.titleMedium)
+            Text("Log in on the site as normal; it stays signed in. Tap a magnet link to send it to TorBox.", style = MaterialTheme.typography.bodySmall)
+            sites.forEach { (n, u) -> OutlinedButton({ url = u }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(n) } }
+        }
+        return
+    }
+    Column(Modifier.fillMaxSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton({ url = null }) { Icon(Icons.Default.Close, "Close site") }
+            Text(note ?: "Browsing", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        androidx.compose.ui.viewinterop.AndroidView(modifier = Modifier.fillMaxSize(), factory = { ctx ->
+            android.webkit.WebView(ctx).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean {
+                        val u = r.url.toString()
+                        if (u.startsWith("magnet:")) { note = "Adding to TorBox..."; vm.addMagnet(u) { note = it }; return true }
+                        return !u.startsWith("http")
+                    }
+                }
+                web = this
+                loadUrl(url!!)
+            }
+        })
     }
 }

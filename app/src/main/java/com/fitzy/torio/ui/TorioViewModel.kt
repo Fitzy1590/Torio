@@ -7,6 +7,8 @@ import com.fitzy.torio.TorioApp
 import com.fitzy.torio.data.BookEntity
 import com.fitzy.torio.data.ProgressEntity
 import com.fitzy.torio.net.BookRepository
+import com.fitzy.torio.net.Provider
+import com.fitzy.torio.net.SourceParser
 import com.fitzy.torio.net.SourceResult
 import com.fitzy.torio.player.DownloadWorker
 import com.fitzy.torio.player.PlayerConnection
@@ -57,6 +59,21 @@ class TorioViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 _search.value = _search.value.copy(messages = listOf(e.message ?: "Failed"))
             } finally { _search.value = _search.value.copy(busyId = null) }
+        }
+    }
+
+    /** Magnet tapped in the Browse tab: save it as a book (adds it to TorBox) so it shows up in Library. */
+    fun addMagnet(magnet: String, onDone: (String) -> Unit) {
+        val hash = Regex("btih:([0-9a-zA-Z]{32,40})").find(magnet)?.groupValues?.get(1)?.lowercase()
+        if (hash == null) { onDone("Not a valid magnet link"); return }
+        val name = Regex("[?&]dn=([^&]+)").find(magnet)?.groupValues?.get(1)
+            ?.let { java.net.URLDecoder.decode(it, "UTF-8") } ?: hash
+        viewModelScope.launch {
+            val msg = try {
+                withContext(Dispatchers.IO) { repo.saveSource(SourceResult("mag:$hash", Provider.TORBOX_SEARCH, name, 0, SourceParser.parseCodec(name), 0, 0, false, hash)) }
+                "Added to TorBox. Find it in Library."
+            } catch (e: Exception) { e.message ?: "Failed" }
+            onDone(msg)
         }
     }
 

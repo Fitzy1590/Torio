@@ -16,7 +16,7 @@ class BookRepository(private val c: AppContainer) {
         val ai = if (c.settings.aioUrl.isBlank()) emptyList()
                  else runCatching { aio.search(q) }.getOrElse { errors += it.message ?: "AIOStreams failed"; emptyList() }
         val all = (tb + ai).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
-        return all.sortedWith(compareByDescending<SourceResult> { it.health }.thenByDescending { it.cached }.thenByDescending { it.seeders }) to errors
+        return all.sortedWith(compareByDescending<SourceResult> { it.quality }.thenByDescending { it.health }.thenByDescending { it.cached }.thenByDescending { it.seeders }) to errors
     }
 
     /** Creates the book + track rows and returns its id. */

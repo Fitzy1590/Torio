@@ -29,6 +29,9 @@ data class SourceResult(
         seeders >= 5 -> 1
         else -> 0
     }
+
+    /** Higher = better audio: codec tier first, then bitrate. Used to sort results. */
+    val quality: Int get() = SourceParser.codecTier(codec) * 10_000 + bitrateKbps.coerceAtMost(9_999)
 }
 
 object SourceParser {
@@ -36,6 +39,16 @@ object SourceParser {
     private val kbps = Regex("""(\d{2,4})\s*k(?:bps|b/s)?\b""", RegexOption.IGNORE_CASE)
     private val seeds = Regex("""(?:👤|seeders?:?|seeds?:?)\s*(\d+)""", RegexOption.IGNORE_CASE)
     private val codecs = listOf("M4B", "FLAC", "AAC", "OPUS", "OGG", "MP3", "M4A")
+
+    private val video = Regex("""\b(2160p|1080[pi]|720p|480p|4k|uhd|blu-?ray|bdrip|brrip|bdremux|web-?dl|web-?rip|hdtv|dvdrip|remux|x26[45]|h\.?26[45]|hevc|hdr10?|s\d{1,2}e\d{1,2}|mkv|avi)\b""", RegexOption.IGNORE_CASE)
+    private val book = Regex("""audio\s?book|unabridged|abridged|narrat|read by|audible|librivox|\bm4b\b""", RegexOption.IGNORE_CASE)
+
+    /** True only for audio content: rejects video releases, and needs an audio codec or audiobook wording. */
+    fun isAudiobook(text: String): Boolean = !video.containsMatchIn(text) && (parseCodec(text) != "Audio" || book.containsMatchIn(text))
+
+    fun codecTier(codec: String): Int = when (codec) {
+        "FLAC" -> 5; "M4B" -> 4; "M4A", "AAC", "OPUS", "OGG" -> 3; "MP3" -> 2; else -> 1
+    }
 
     fun parseSize(s: String): Long {
         val m = size.find(s) ?: return 0
@@ -96,17 +109,19 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         val q = query.lowercase()
         val mine = runCatching { myList() }.getOrDefault(emptyList())
             .filter { t -> q.split(' ').filter { it.length > 1 }.all { t.name.lowercase().contains(it) } }
-            .map { t ->
+            .mapNotNull { t ->
                 val meta = t.name + " " + t.files.joinToString(" ") { it.name }
+                if (!SourceParser.isAudiobook(meta)) return@mapNotNull null
                 SourceResult("cloud:${t.id}", Provider.TORBOX_CLOUD, t.name, t.size, SourceParser.parseCodec(meta),
                     SourceParser.parseBitrate(t.name), 0, true, t.hash, null, t.id)
             }
         val found = runCatching {
-            val o = call(Request.Builder().url("$searchBase/torrents/search/${enc(query)}?metadata=false&check_cache=true&check_owned=true"))
+            val o = call(Request.Builder().url("$searchBase/torrents/search/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
             val arr = (o["data"] as? JsonObject)?.get("torrents") as? JsonArray ?: JsonArray(emptyList())
             arr.mapNotNull { it as? JsonObject }.mapNotNull { t ->
                 val title = t.str("raw_title") ?: t.str("title") ?: return@mapNotNull null
                 val hash = t.str("hash")?.lowercase() ?: return@mapNotNull null
+                if (!SourceParser.isAudiobook(title)) return@mapNotNull null
                 SourceResult("ts:$hash", Provider.TORBOX_SEARCH, title, t.lng("size"), SourceParser.parseCodec(title),
                     SourceParser.parseBitrate(title), t.lng("last_known_seeders").toInt(),
                     (t["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, hash)
@@ -169,6 +184,7 @@ class AioStreamsClient(private val http: OkHttpClient, private val manifestUrl: 
         val url = s.str("url")
         val hash = s.str("infoHash")?.lowercase()
         if (url == null && hash == null) return null
+        if (!SourceParser.isAudiobook(text + " " + (hints?.str("filename") ?: ""))) return null
         val title = hints?.str("filename") ?: text.lineSequence().firstOrNull { it.isNotBlank() } ?: id
         return SourceResult("aio:$id:$i", Provider.AIOSTREAMS, title, size, SourceParser.parseCodec(text),
             SourceParser.parseBitrate(text), SourceParser.parseSeeders(text),
