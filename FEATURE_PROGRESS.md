@@ -1,18 +1,19 @@
 # FEATURE_PROGRESS
+Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/android, `./gradlew assembleDebug` passes.
 
-## Audit (Phase 1)
-- Repo contains only README.md. No app/, Gradle, Media3 service, ViewModels, or CI yet. Greenfield.
+## Done (v0.1.0)
+- [x] CLAUDE.md, .claude/rules/ui.md, .claude/settings.json, CI workflow (.github/workflows/build-apk.yml)
+- [x] Gradle scaffold, manifest, wrapper
+- [x] Room: books/tracks/progress; SyncRepository + LocalSyncRepository (Phase 2 hook)
+- [x] TorBoxApiClient (cloud list, search API, add magnet, links), AioStreamsClient (Stremio protocol), SourceParser
+- [x] Media3AudioService: 96MB RAM buffer, 10-min read-ahead, torbox:// resolving, speed 0.5-3.5 pitch-kept, 3s progress saves
+- [x] VoiceDspEnhancer: EQ + compressor/limiter + loudness
+- [x] DownloadWorker (offline), BookRepository
+- [x] Compose UI: Search + source picker, Library (in progress/downloaded/finished), Player (speed, DSP, chapters), Settings
+- [x] Auto-resume on launch
 
-## Vote (awaiting user)
-- [ ] Option A: Full Native Torio Engine (Media3 + TorBox/AIOStreams + Dialogue DSP + Room Resume & Library)
-- [ ] Option B: Basic Audio Player Wrapper
-
-## Planned tasks (start after vote)
-- [ ] Phase 2: CLAUDE.md, .github/workflows/build-apk.yml, .claude/rules/ui.md, .claude/settings.json
-- [ ] Gradle scaffold (com.fitzy.torio)
-- [ ] TorBoxApiClient + AIOStreams client + source picker
-- [ ] Media3AudioService (prefetch buffering, speed 0.5-3.5x)
-- [ ] VoiceDspEnhancer
-- [ ] Room progress (3s saves) + SyncRepository interface
-- [ ] Compose UI: player, library, source drawer
-- [ ] assembleDebug passes, release + APK links
+## Unverified / next
+- [ ] Not tested on a device: needs real TorBox key. AIOStreams search assumes a Stremio-style manifest with search catalogs.
+- [ ] Cover art + author lookup (none yet); chapter markers inside single M4B files
+- [ ] Release-signed APK (currently debug-signed)
+- [ ] Phase 2: Windows sync implementing SyncRepository

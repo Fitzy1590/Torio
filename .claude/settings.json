@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": ["Bash(./gradlew:*)", "Bash(git status:*)", "Bash(git diff:*)"],
+    "deny": ["Read(./local.properties)", "Read(./*.jks)", "Read(./*.keystore)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "case \"$CLAUDE_FILE_PATH\" in *local.properties|*.jks|*.keystore) echo 'blocked: secrets file' >&2; exit 2;; esac" }]
+      }
+    ]
+  }
+}
