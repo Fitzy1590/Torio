@@ -8,7 +8,7 @@ import org.xmlpull.v1.XmlPullParser
 import java.net.URLEncoder
 import java.util.Locale
 
-enum class Provider { TORBOX_CLOUD, TORBOX_SEARCH, TORBOX_USENET, TORZNAB, AIOSTREAMS }
+enum class Provider { TORBOX_CLOUD, TORBOX_SEARCH, TORBOX_USENET, TORZNAB, AUDIOBOOKBAY, AIOSTREAMS }
 
 /** One row in the source picker. Either [hash] (needs TorBox) or [directUrl] is set. */
 data class SourceResult(
@@ -301,5 +301,52 @@ class TorznabClient(private val http: OkHttpClient, private val url: () -> Strin
             ev = p.next()
         }
         return out
+    }
+}
+
+/** Scrapes AudiobookBay search + detail pages for info hashes. [cookies] can supply the Browse tab's login cookies. */
+class AudiobookBayClient(private val http: OkHttpClient, private val baseUrl: () -> String, private val cookies: (String) -> String?) {
+    private val ua = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+    private val post = Regex("""<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val hashRe = Regex("""info\s*hash:?\s*(?:</[^>]+>\s*)*(?:<[^>]+>\s*)*([0-9a-fA-F]{40})""", RegexOption.IGNORE_CASE)
+    private val btihRe = Regex("""btih:([0-9a-fA-F]{40})""")
+    private val sizeRe = Regex("""file\s*size:?\s*(?:</[^>]+>\s*)*(?:<[^>]+>\s*)*([\d.,]+\s*[KMGT]B)""", RegexOption.IGNORE_CASE)
+    private val bitrateRe = Regex("""bitrate:?\s*(?:</[^>]+>\s*)*(?:<[^>]+>\s*)*(\d{2,4})""", RegexOption.IGNORE_CASE)
+
+    private fun fetch(url: String): String {
+        val b = Request.Builder().url(url).header("User-Agent", ua)
+        cookies(url)?.takeIf { it.isNotBlank() }?.let { b.header("Cookie", it) }
+        http.newCall(b.build()).execute().use {
+            if (!it.isSuccessful) error("AudiobookBay ${it.code}")
+            return it.body?.string().orEmpty()
+        }
+    }
+
+    private fun text(html: String) = android.text.Html.fromHtml(html, 0).toString().replace(Regex("""\s+"""), " ").trim()
+
+    fun search(query: String): List<SourceResult> {
+        val base = baseUrl().trimEnd('/').ifBlank { return emptyList() }
+        val html = fetch("$base/?s=${enc(query)}")
+        val hits = post.findAll(html).map { it.groupValues[1] to text(it.groupValues[2]) }
+            .filter { it.second.isNotBlank() }.distinctBy { it.first }.take(8).toList()
+        if (hits.isEmpty()) {
+            if (html.contains("cloudflare", true) || html.contains("just a moment", true)) error("AudiobookBay blocked the request (Cloudflare). Open it once in the Browse tab.")
+            return emptyList()
+        }
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
+        try {
+            return pool.invokeAll(hits.map { (href, title) -> java.util.concurrent.Callable { runCatching { detail(base, href, title) }.getOrNull() } })
+                .mapNotNull { it.get() }
+        } finally { pool.shutdown() }
+    }
+
+    private fun detail(base: String, href: String, title: String): SourceResult? {
+        val url = if (href.startsWith("http")) href else base + (if (href.startsWith("/")) href else "/$href")
+        val html = fetch(url)
+        val hash = (hashRe.find(html)?.groupValues?.get(1) ?: btihRe.find(html)?.groupValues?.get(1))?.lowercase() ?: return null
+        val size = sizeRe.find(html)?.groupValues?.get(1)?.let { SourceParser.parseSize(it) } ?: 0L
+        val meta = title + " " + text(html.substringAfter("Format", "").take(600))
+        val bitrate = bitrateRe.find(html)?.groupValues?.get(1)?.toIntOrNull() ?: SourceParser.parseBitrate(title)
+        return SourceResult("abb:$hash", Provider.AUDIOBOOKBAY, title, size, SourceParser.parseCodec(meta), bitrate, 0, false, hash)
     }
 }

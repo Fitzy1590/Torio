@@ -22,6 +22,7 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [x] Torznab source (Prowlarr/Jackett, audiobook category 3030) set in Settings; only results with an info hash are used
 - [x] TorBox Usenet (NZB) search + stream/download via `tbusenet://` tracks
 - [x] TorBox cache check on every found hash (marks them instant); duplicates across sources merged
+- [x] AudiobookBay scraper source (search page + detail pages for info hash; uses Browse tab login cookies). Written without live HTML access: unverified
 - [x] Cached/in-cloud results listed first, then by quality
 - [x] Looser audiobook filter for audiobook-focused sources (still drops video and ebooks)
 

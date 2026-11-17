@@ -104,6 +104,7 @@ private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onD
                     Provider.TORBOX_CLOUD -> "⚡ TorBox Cloud"; Provider.TORBOX_SEARCH -> if (r.cached) "⚡ TorBox Cached" else "TorBox"
                     Provider.TORBOX_USENET -> if (r.cached) "⚡ TorBox Usenet" else "TorBox Usenet"
                     Provider.TORZNAB -> if (r.cached) "⚡ Indexer" else "🔎 Indexer"
+                    Provider.AUDIOBOOKBAY -> if (r.cached) "⚡ AudiobookBay" else "📚 AudiobookBay"
                     Provider.AIOSTREAMS -> "🌐 AIOStreams" }, style = MaterialTheme.typography.labelLarge)
             }
             Text(r.title, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(vertical = 4.dp))

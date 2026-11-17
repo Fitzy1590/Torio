@@ -8,6 +8,9 @@ import com.fitzy.torio.data.TrackEntity
 class BookRepository(private val c: AppContainer) {
     private val torbox = TorBoxApiClient(c.http) { c.settings.torboxKey }
     private val aio = AioStreamsClient(c.http) { c.settings.aioUrl }
+    private val abb = AudiobookBayClient(c.http, { c.settings.abbUrl }) { url ->
+        runCatching { android.webkit.CookieManager.getInstance().getCookie(url) }.getOrNull()
+    }
     private val torznab = TorznabClient(c.http, { c.settings.torznabUrl }, { c.settings.torznabKey })
 
     fun search(q: String): Pair<List<SourceResult>, List<String>> {
@@ -21,10 +24,12 @@ class BookRepository(private val c: AppContainer) {
                  else runCatching { torbox.searchUsenet(q) }.getOrElse { usenetError = "Usenet: ${it.message}"; emptyList() }
         val tz = if (c.settings.torznabUrl.isBlank()) emptyList()
                  else runCatching { torznab.search(q) }.getOrElse { errors += it.message ?: "Torznab failed"; emptyList() }
-        val all = markCached(tb + nz + tz + ai).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
+        var abbError: String? = null
+        val ab = runCatching { abb.search(q) }.getOrElse { abbError = it.message ?: "AudiobookBay failed"; emptyList() }
+        val all = markCached(tb + nz + tz + ab + ai).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
         val sorted = all.sortedWith(compareByDescending<SourceResult> { it.cached || it.provider == Provider.TORBOX_CLOUD }.thenByDescending { it.quality }.thenByDescending { it.health }.thenByDescending { it.seeders })
             .distinctBy { it.hash ?: it.id }
-        if (sorted.isEmpty() && usenetError != null) errors += usenetError!!
+        if (sorted.isEmpty()) { usenetError?.let { errors += it }; abbError?.let { errors += it } }
         return sorted to errors
     }
 
