@@ -18,9 +18,9 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         return try {
             for (t in dao.tracks(bookId)) {
                 if (t.localPath != null && File(t.localPath).exists()) continue
-                val url = if (t.remoteUrl.startsWith("torbox://")) {
+                val url = if (t.remoteUrl.startsWith("torbox://") || t.remoteUrl.startsWith("tbusenet://")) {
                     val u = android.net.Uri.parse(t.remoteUrl)
-                    torbox.requestLink(u.host!!.toLong(), u.pathSegments[0].toLong())
+                    torbox.requestLink(u.host!!.toLong(), u.pathSegments[0].toLong(), u.scheme == "tbusenet")
                 } else t.remoteUrl
                 val ext = t.title.substringAfterLast('.', "mp3").take(4)
                 val out = File(dir, "${t.idx}.$ext")

@@ -17,8 +17,15 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [x] Results ranked by quality: FLAC > M4B > M4A/AAC/Opus/Ogg > MP3, then bitrate, then cached/seeders
 - [x] Browse tab: in-app browser for AudiobookBay (address editable in Settings), LibriVox, Internet Archive, Loyal Books; logins persist; tapping a magnet adds it to TorBox/Library
 
+## Done (v0.3.0)
+- [x] Search errors are shown instead of a silent "No results"
+- [x] Torznab source (Prowlarr/Jackett, audiobook category 3030) set in Settings; only results with an info hash are used
+- [x] TorBox Usenet (NZB) search + stream/download via `tbusenet://` tracks
+- [x] TorBox cache check on every found hash (marks them instant); duplicates across sources merged
+- [x] Looser audiobook filter for audiobook-focused sources (still drops video and ebooks)
+
 ## Unverified / next
-- [ ] Not tested on a device: needs real TorBox key. AIOStreams search assumes a Stremio-style manifest with search catalogs.
+- [ ] Not tested on a device: needs real TorBox key. Usenet/cache-check response fields are written from the TorBox docs, not yet seen live. AIOStreams search assumes a Stremio-style manifest with search catalogs.
 - [ ] Cover art + author lookup (none yet); chapter markers inside single M4B files
 - [ ] Release-signed APK (currently debug-signed)
 - [x] CI publishes a GitHub release (tag build-N) on every push (tag pushes are blocked in the cloud sandbox)

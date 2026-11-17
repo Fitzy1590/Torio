@@ -102,6 +102,8 @@ private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onD
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(listOf("🔴", "🟡", "🟢")[r.health] + " " + when (r.provider) {
                     Provider.TORBOX_CLOUD -> "⚡ TorBox Cloud"; Provider.TORBOX_SEARCH -> if (r.cached) "⚡ TorBox Cached" else "TorBox"
+                    Provider.TORBOX_USENET -> if (r.cached) "⚡ TorBox Usenet" else "TorBox Usenet"
+                    Provider.TORZNAB -> if (r.cached) "⚡ Indexer" else "🔎 Indexer"
                     Provider.AIOSTREAMS -> "🌐 AIOStreams" }, style = MaterialTheme.typography.labelLarge)
             }
             Text(r.title, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(vertical = 4.dp))
@@ -211,12 +213,17 @@ private fun SettingsScreen(vm: TorioViewModel) {
     val s = vm.settings
     var key by remember { mutableStateOf(s.torboxKey) }
     var aio by remember { mutableStateOf(s.aioUrl) }
+    var tz by remember { mutableStateOf(s.torznabUrl) }
+    var tzKey by remember { mutableStateOf(s.torznabKey) }
     var abb by remember { mutableStateOf(s.abbUrl) }
     var auto by remember { mutableStateOf(s.autoResume) }
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(key, { key = it; s.torboxKey = it }, label = { Text("TorBox API key") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
         OutlinedTextField(aio, { aio = it; s.aioUrl = it }, label = { Text("AIOStreams manifest URL (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(tz, { tz = it; s.torznabUrl = it }, label = { Text("Torznab URL (Prowlarr/Jackett, optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(tzKey, { tzKey = it; s.torznabKey = it }, label = { Text("Torznab API key (if not in URL)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
         OutlinedTextField(abb, { abb = it; s.abbUrl = it }, label = { Text("AudiobookBay address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Auto-resume on launch", Modifier.weight(1f)); Switch(auto, { auto = it; s.autoResume = it })

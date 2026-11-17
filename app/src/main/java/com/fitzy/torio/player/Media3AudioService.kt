@@ -35,9 +35,9 @@ class Media3AudioService : MediaSessionService() {
 
         val http = OkHttpDataSource.Factory(c.http)
         val resolving = ResolvingDataSource.Factory(http) { spec: DataSpec ->
-            if (spec.uri.scheme == "torbox") {
+            if (spec.uri.scheme == "torbox" || spec.uri.scheme == "tbusenet") {
                 val seg = spec.uri.pathSegments
-                val url = torbox.requestLink(spec.uri.host!!.toLong(), seg[0].toLong())
+                val url = torbox.requestLink(spec.uri.host!!.toLong(), seg[0].toLong(), spec.uri.scheme == "tbusenet")
                 spec.withUri(Uri.parse(url))
             } else spec
         }

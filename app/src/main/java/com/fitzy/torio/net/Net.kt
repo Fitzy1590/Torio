@@ -2,11 +2,13 @@ package com.fitzy.torio.net
 
 import kotlinx.serialization.json.*
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import org.xmlpull.v1.XmlPullParser
 import java.net.URLEncoder
 import java.util.Locale
 
-enum class Provider { TORBOX_CLOUD, TORBOX_SEARCH, AIOSTREAMS }
+enum class Provider { TORBOX_CLOUD, TORBOX_SEARCH, TORBOX_USENET, TORZNAB, AIOSTREAMS }
 
 /** One row in the source picker. Either [hash] (needs TorBox) or [directUrl] is set. */
 data class SourceResult(
@@ -21,6 +23,7 @@ data class SourceResult(
     val hash: String? = null,
     val directUrl: String? = null,
     val torboxId: Long? = null,
+    val nzbUrl: String? = null,
 ) {
     /** 0 = bad, 1 = ok, 2 = great */
     val health: Int get() = when {
@@ -44,7 +47,11 @@ object SourceParser {
     private val book = Regex("""audio\s?book|unabridged|abridged|narrat|read by|audible|librivox|\bm4b\b""", RegexOption.IGNORE_CASE)
 
     /** True only for audio content: rejects video releases, and needs an audio codec or audiobook wording. */
-    fun isAudiobook(text: String): Boolean = !video.containsMatchIn(text) && (parseCodec(text) != "Audio" || book.containsMatchIn(text))
+    private val ebook = Regex("""\b(epub|pdf|mobi|azw3?|ebook|e-book|cbz|cbr|comics?|magazines?|software|keygen|iso)\b""", RegexOption.IGNORE_CASE)
+
+    /** [lenient] (audiobook-focused sources) also accepts titles with no codec/wording, unless they look like ebooks. */
+    fun isAudiobook(text: String, lenient: Boolean = false): Boolean = !video.containsMatchIn(text) &&
+        (parseCodec(text) != "Audio" || book.containsMatchIn(text) || (lenient && !ebook.containsMatchIn(text)))
 
     fun codecTier(codec: String): Int = when (codec) {
         "FLAC" -> 5; "M4B" -> 4; "M4A", "AAC", "OPUS", "OGG" -> 3; "MP3" -> 2; else -> 1
@@ -92,8 +99,12 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         }
     }
 
-    fun myList(): List<TorBoxTorrent> {
-        val arr = call(Request.Builder().url("$base/torrents/mylist"))["data"] as? JsonArray ?: return emptyList()
+    fun myList(): List<TorBoxTorrent> = list("torrents/mylist")
+
+    fun usenetList(): List<TorBoxTorrent> = list("usenet/mylist")
+
+    private fun list(path: String): List<TorBoxTorrent> {
+        val arr = call(Request.Builder().url("$base/$path"))["data"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { it as? JsonObject }.map { o ->
             TorBoxTorrent(
                 o.lng("id"), o.str("name") ?: "", (o.str("hash") ?: "").lowercase(), o.lng("size"),
@@ -122,7 +133,7 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
             arr.mapNotNull { it as? JsonObject }.mapNotNull { t ->
                 val title = t.str("raw_title") ?: t.str("title") ?: return@mapNotNull null
                 val hash = t.str("hash")?.lowercase() ?: return@mapNotNull null
-                if (!SourceParser.isAudiobook(title)) return@mapNotNull null
+                if (!SourceParser.isAudiobook(title, lenient = true)) return@mapNotNull null
                 SourceResult("ts:$hash", Provider.TORBOX_SEARCH, title, t.lng("size"), SourceParser.parseCodec(title),
                     SourceParser.parseBitrate(title), t.lng("last_known_seeders").toInt(),
                     (t["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, hash)
@@ -132,6 +143,42 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         val all = mine + found.filter { it.hash !in mineHashes }
         if (all.isEmpty() && searchError != null) error(searchError!!)
         return all
+    }
+
+    /** Hashes (lowercase) that TorBox already has cached, so they play instantly. */
+    fun cachedHashes(hashes: List<String>): Set<String> = hashes.chunked(50).flatMap { chunk ->
+        val d = call(Request.Builder().url("$base/torrents/checkcached?hash=${chunk.joinToString(",")}&format=object&list_files=false"))["data"]
+        when (d) {
+            is JsonObject -> d.keys.map { it.lowercase() }
+            is JsonArray -> d.mapNotNull { (it as? JsonObject)?.str("hash")?.lowercase() }
+            else -> emptyList()
+        }
+    }.toSet()
+
+    /** TorBox's Usenet (NZB) search index. */
+    fun searchUsenet(query: String): List<SourceResult> {
+        val o = call(Request.Builder().url("$searchBase/usenet/search/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
+        val arr = (o["data"] as? JsonObject)?.get("nzbs") as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { it as? JsonObject }.mapNotNull { n ->
+            val title = n.str("raw_title") ?: n.str("title") ?: return@mapNotNull null
+            val nzb = n.str("nzb") ?: return@mapNotNull null
+            if (!SourceParser.isAudiobook(title, lenient = true)) return@mapNotNull null
+            SourceResult("nzb:${n.str("hash") ?: nzb.hashCode()}", Provider.TORBOX_USENET, title, n.lng("size"), SourceParser.parseCodec(title),
+                SourceParser.parseBitrate(title), 0, (n["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, nzbUrl = nzb)
+        }
+    }
+
+    /** Adds the NZB to the account if needed and returns the download with its file list. */
+    fun ensureUsenetInAccount(nzbUrl: String, title: String): TorBoxTorrent {
+        usenetList().firstOrNull { it.name == title && it.files.isNotEmpty() }?.let { return it }
+        val form = FormBody.Builder().add("link", nzbUrl).add("name", title).build()
+        val id = call(Request.Builder().url("$base/usenet/createusenetdownload").post(form))["data"]
+            ?.jsonObject?.lng("usenetdownload_id") ?: 0L
+        repeat(10) {
+            usenetList().firstOrNull { (id != 0L && it.id == id || it.name == title) && it.files.isNotEmpty() }?.let { return it }
+            Thread.sleep(1500)
+        }
+        error("TorBox is still fetching this Usenet download. Try again in a minute.")
     }
 
     /** Adds the magnet to the account if needed and returns the torrent with its file list. */
@@ -147,8 +194,9 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
     }
 
     /** Short-lived direct CDN link for one file. */
-    fun requestLink(torrentId: Long, fileId: Long): String {
-        val url = "$base/torrents/requestdl?token=${enc(key())}&torrent_id=$torrentId&file_id=$fileId&zip_link=false"
+    fun requestLink(torrentId: Long, fileId: Long, usenet: Boolean = false): String {
+        val url = if (usenet) "$base/usenet/requestdl?token=${enc(key())}&usenet_id=$torrentId&file_id=$fileId&zip_link=false"
+                  else "$base/torrents/requestdl?token=${enc(key())}&torrent_id=$torrentId&file_id=$fileId&zip_link=false"
         return call(Request.Builder().url(url))["data"]?.jsonPrimitive?.contentOrNull ?: error("No download link")
     }
 }
@@ -193,5 +241,65 @@ class AioStreamsClient(private val http: OkHttpClient, private val manifestUrl: 
         return SourceResult("aio:$id:$i", Provider.AIOSTREAMS, title, size, SourceParser.parseCodec(text),
             SourceParser.parseBitrate(text), SourceParser.parseSeeders(text),
             text.contains("⚡") || text.contains("cached", true), hash, url)
+    }
+}
+
+/** Torznab (Prowlarr / Jackett) search restricted to the audiobook category. Only results with an info hash are usable. */
+class TorznabClient(private val http: OkHttpClient, private val url: () -> String, private val key: () -> String) {
+    private val btih = Regex("""btih:([0-9a-fA-F]{40})""")
+
+    fun search(query: String): List<SourceResult> {
+        val base = url().toHttpUrlOrNull() ?: error("Torznab URL is not valid")
+        val u = base.newBuilder().setQueryParameter("t", "search").setQueryParameter("q", query)
+            .setQueryParameter("cat", "3030").setQueryParameter("extended", "1")
+            .apply { key().takeIf { it.isNotBlank() }?.let { setQueryParameter("apikey", it) } }.build()
+        val body = http.newCall(Request.Builder().url(u).build()).execute().use {
+            if (!it.isSuccessful) error("Torznab ${it.code}")
+            it.body?.string().orEmpty()
+        }
+        return parse(body)
+    }
+
+    private fun parse(xml: String): List<SourceResult> {
+        val p = android.util.Xml.newPullParser().apply { setInput(java.io.StringReader(xml)) }
+        val out = mutableListOf<SourceResult>()
+        var inItem = false
+        var title = ""; var size = 0L; var seeders = 0; var link: String? = null; var magnet: String? = null; var hash: String? = null
+        var ev = p.eventType
+        while (ev != XmlPullParser.END_DOCUMENT) {
+            if (ev == XmlPullParser.START_TAG) {
+                val n = p.name
+                when {
+                    n == "error" -> error("Torznab: ${p.getAttributeValue(null, "description") ?: "error"}")
+                    n == "item" -> { inItem = true; title = ""; size = 0L; seeders = 0; link = null; magnet = null; hash = null }
+                    !inItem -> {}
+                    n == "title" -> title = p.nextText()
+                    n == "size" -> size = p.nextText().toLongOrNull() ?: 0L
+                    n == "link" -> link = p.nextText()
+                    n == "enclosure" -> {
+                        if (size == 0L) size = p.getAttributeValue(null, "length")?.toLongOrNull() ?: 0L
+                        if (link == null) link = p.getAttributeValue(null, "url")
+                    }
+                    n.endsWith(":attr") -> {
+                        val v = p.getAttributeValue(null, "value") ?: ""
+                        when (p.getAttributeValue(null, "name")) {
+                            "infohash" -> hash = v.lowercase()
+                            "seeders" -> seeders = v.toIntOrNull() ?: 0
+                            "size" -> if (size == 0L) size = v.toLongOrNull() ?: 0L
+                            "magneturl" -> magnet = v
+                        }
+                    }
+                }
+            } else if (ev == XmlPullParser.END_TAG && p.name == "item" && inItem) {
+                inItem = false
+                val h = hash?.takeIf { it.length == 40 } ?: btih.find(magnet ?: link ?: "")?.groupValues?.get(1)?.lowercase()
+                if (h != null && title.isNotBlank() && SourceParser.isAudiobook(title, lenient = true)) {
+                    out += SourceResult("tz:$h", Provider.TORZNAB, title, size, SourceParser.parseCodec(title),
+                        SourceParser.parseBitrate(title), seeders, false, h)
+                }
+            }
+            ev = p.next()
+        }
+        return out
     }
 }
