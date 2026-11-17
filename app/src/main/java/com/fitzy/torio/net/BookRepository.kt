@@ -22,7 +22,7 @@ class BookRepository(private val c: AppContainer) {
         val tz = if (c.settings.torznabUrl.isBlank()) emptyList()
                  else runCatching { torznab.search(q) }.getOrElse { errors += it.message ?: "Torznab failed"; emptyList() }
         val all = markCached(tb + nz + tz + ai).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
-        val sorted = all.sortedWith(compareByDescending<SourceResult> { it.quality }.thenByDescending { it.health }.thenByDescending { it.cached }.thenByDescending { it.seeders })
+        val sorted = all.sortedWith(compareByDescending<SourceResult> { it.cached || it.provider == Provider.TORBOX_CLOUD }.thenByDescending { it.quality }.thenByDescending { it.health }.thenByDescending { it.seeders })
             .distinctBy { it.hash ?: it.id }
         if (sorted.isEmpty() && usenetError != null) errors += usenetError!!
         return sorted to errors
