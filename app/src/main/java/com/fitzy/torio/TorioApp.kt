@@ -8,7 +8,7 @@ import okhttp3.OkHttpClient
 class AppContainer(app: Application) {
     val db = Room.databaseBuilder(app, TorioDatabase::class.java, "torio.db").build()
     val settings = Settings(app)
-    val http: OkHttpClient = OkHttpClient()
+    val http: OkHttpClient = OkHttpClient.Builder().dns(com.fitzy.torio.net.DohFallbackDns()).build()
     val sync: SyncRepository = LocalSyncRepository(db.progressDao())
 }
 

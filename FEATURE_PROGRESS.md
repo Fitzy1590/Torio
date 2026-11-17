@@ -32,3 +32,6 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [ ] Release-signed APK (currently debug-signed)
 - [x] CI publishes a GitHub release (tag build-N) on every push (tag pushes are blocked in the cloud sandbox)
 - [ ] Phase 2: Windows sync implementing SyncRepository
+
+## Done (v0.3.1)
+- [x] DNS fallback: if the phone can't resolve a host, look it up via Cloudflare DNS-over-HTTPS (fixes "Unable to resolve search-api.torbox.app"). Untested on device.
