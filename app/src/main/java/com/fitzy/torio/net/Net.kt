@@ -115,6 +115,7 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
                 SourceResult("cloud:${t.id}", Provider.TORBOX_CLOUD, t.name, t.size, SourceParser.parseCodec(meta),
                     SourceParser.parseBitrate(t.name), 0, true, t.hash, null, t.id)
             }
+        var searchError: String? = null
         val found = runCatching {
             val o = call(Request.Builder().url("$searchBase/torrents/search/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
             val arr = (o["data"] as? JsonObject)?.get("torrents") as? JsonArray ?: JsonArray(emptyList())
@@ -126,9 +127,11 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
                     SourceParser.parseBitrate(title), t.lng("last_known_seeders").toInt(),
                     (t["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, hash)
             }
-        }.getOrDefault(emptyList())
+        }.getOrElse { searchError = it.message ?: "TorBox search failed"; emptyList() }
         val mineHashes = mine.mapNotNull { it.hash }.toSet()
-        return mine + found.filter { it.hash !in mineHashes }
+        val all = mine + found.filter { it.hash !in mineHashes }
+        if (all.isEmpty() && searchError != null) error(searchError!!)
+        return all
     }
 
     /** Adds the magnet to the account if needed and returns the torrent with its file list. */
@@ -163,6 +166,7 @@ class AioStreamsClient(private val http: OkHttpClient, private val manifestUrl: 
         val base = mUrl.removeSuffix("/manifest.json").trimEnd('/')
         val catalogs = (get("$base/manifest.json")["catalogs"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
             .filter { c -> (c["extra"] as? JsonArray).orEmpty().any { (it as? JsonObject)?.str("name") == "search" } }
+        if (catalogs.isEmpty()) error("AIOStreams manifest has no search catalog")
         val metas = catalogs.take(3).flatMap { c ->
             runCatching {
                 val m = get("$base/catalog/${c.str("type")}/${c.str("id")}/search=${enc(query)}.json")["metas"] as? JsonArray
