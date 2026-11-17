@@ -88,7 +88,6 @@ private fun JsonObject.lng(k: String) = (this[k] as? JsonPrimitive)?.longOrNull 
 
 class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> String) {
     private val base = "https://api.torbox.app/v1/api"
-    private val searchBase = "https://search-api.torbox.app"
 
     private fun call(req: Request.Builder): JsonObject {
         val r = req.header("Authorization", "Bearer ${key()}").build()
@@ -115,7 +114,7 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         }
     }
 
-    /** Searches the user's own cloud first, then TorBox's search index. */
+    /** Searches the user's own TorBox cloud (TorBox's public search host no longer exists). */
     fun search(query: String): List<SourceResult> {
         val q = query.lowercase()
         val mine = runCatching { myList() }.getOrDefault(emptyList())
@@ -126,23 +125,7 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
                 SourceResult("cloud:${t.id}", Provider.TORBOX_CLOUD, t.name, t.size, SourceParser.parseCodec(meta),
                     SourceParser.parseBitrate(t.name), 0, true, t.hash, null, t.id)
             }
-        var searchError: String? = null
-        val found = runCatching {
-            val o = call(Request.Builder().url("$searchBase/torrents/search/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
-            val arr = (o["data"] as? JsonObject)?.get("torrents") as? JsonArray ?: JsonArray(emptyList())
-            arr.mapNotNull { it as? JsonObject }.mapNotNull { t ->
-                val title = t.str("raw_title") ?: t.str("title") ?: return@mapNotNull null
-                val hash = t.str("hash")?.lowercase() ?: return@mapNotNull null
-                if (!SourceParser.isAudiobook(title, lenient = true)) return@mapNotNull null
-                SourceResult("ts:$hash", Provider.TORBOX_SEARCH, title, t.lng("size"), SourceParser.parseCodec(title),
-                    SourceParser.parseBitrate(title), t.lng("last_known_seeders").toInt(),
-                    (t["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, hash)
-            }
-        }.getOrElse { searchError = it.message ?: "TorBox search failed"; emptyList() }
-        val mineHashes = mine.mapNotNull { it.hash }.toSet()
-        val all = mine + found.filter { it.hash !in mineHashes }
-        if (all.isEmpty() && searchError != null) error(searchError!!)
-        return all
+        return mine
     }
 
     /** Hashes (lowercase) that TorBox already has cached, so they play instantly. */
@@ -154,19 +137,6 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
             else -> emptyList()
         }
     }.toSet()
-
-    /** TorBox's Usenet (NZB) search index. */
-    fun searchUsenet(query: String): List<SourceResult> {
-        val o = call(Request.Builder().url("$searchBase/usenet/search/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
-        val arr = (o["data"] as? JsonObject)?.get("nzbs") as? JsonArray ?: return emptyList()
-        return arr.mapNotNull { it as? JsonObject }.mapNotNull { n ->
-            val title = n.str("raw_title") ?: n.str("title") ?: return@mapNotNull null
-            val nzb = n.str("nzb") ?: return@mapNotNull null
-            if (!SourceParser.isAudiobook(title, lenient = true)) return@mapNotNull null
-            SourceResult("nzb:${n.str("hash") ?: nzb.hashCode()}", Provider.TORBOX_USENET, title, n.lng("size"), SourceParser.parseCodec(title),
-                SourceParser.parseBitrate(title), 0, (n["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, nzbUrl = nzb)
-        }
-    }
 
     /** Adds the NZB to the account if needed and returns the download with its file list. */
     fun ensureUsenetInAccount(nzbUrl: String, title: String): TorBoxTorrent {

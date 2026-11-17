@@ -35,3 +35,6 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 
 ## Done (v0.3.1)
 - [x] DNS fallback: if the phone can't resolve a host, look it up via Cloudflare DNS-over-HTTPS (fixes "Unable to resolve search-api.torbox.app"). Untested on device.
+
+## Done (v0.3.2)
+- [x] Removed TorBox torrent + Usenet search (search-api.torbox.app no longer exists, NXDOMAIN). TorBox now only searches your own cloud + cache check. Search needs AIOStreams or Torznab; a hint shows when none is set.

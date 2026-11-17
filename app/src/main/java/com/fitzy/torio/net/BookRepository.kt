@@ -19,17 +19,15 @@ class BookRepository(private val c: AppContainer) {
                  else runCatching { torbox.search(q) }.getOrElse { errors += it.message ?: "TorBox failed"; emptyList() }
         val ai = if (c.settings.aioUrl.isBlank()) emptyList()
                  else runCatching { aio.search(q) }.getOrElse { errors += it.message ?: "AIOStreams failed"; emptyList() }
-        var usenetError: String? = null
-        val nz = if (c.settings.torboxKey.isBlank()) emptyList()
-                 else runCatching { torbox.searchUsenet(q) }.getOrElse { usenetError = "Usenet: ${it.message}"; emptyList() }
         val tz = if (c.settings.torznabUrl.isBlank()) emptyList()
                  else runCatching { torznab.search(q) }.getOrElse { errors += it.message ?: "Torznab failed"; emptyList() }
         var abbError: String? = null
         val ab = runCatching { abb.search(q) }.getOrElse { abbError = it.message ?: "AudiobookBay failed"; emptyList() }
-        val all = markCached(tb + nz + tz + ab + ai).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
+        val all = markCached(tb + tz + ab + ai).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
         val sorted = all.sortedWith(compareByDescending<SourceResult> { it.cached || it.provider == Provider.TORBOX_CLOUD }.thenByDescending { it.quality }.thenByDescending { it.health }.thenByDescending { it.seeders })
             .distinctBy { it.hash ?: it.id }
-        if (sorted.isEmpty()) { usenetError?.let { errors += it }; abbError?.let { errors += it } }
+        if (sorted.isEmpty() && c.settings.aioUrl.isBlank() && c.settings.torznabUrl.isBlank()) errors += "No search source set up. Add an AIOStreams or Torznab URL in Settings."
+        if (sorted.isEmpty()) { abbError?.let { errors += it } }
         return sorted to errors
     }
 
