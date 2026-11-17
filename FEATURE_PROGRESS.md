@@ -38,3 +38,6 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 
 ## Done (v0.3.2)
 - [x] Removed TorBox torrent + Usenet search (search-api.torbox.app no longer exists, NXDOMAIN). TorBox now only searches your own cloud + cache check. Search needs AIOStreams or Torznab; a hint shows when none is set.
+
+## Done (v0.3.3)
+- [x] Browse tab: added "Audiobook Search (Google)" custom search engine (cse.google.com cx=0065167...). Opens in the in-app browser like the other sites; magnet taps go to TorBox. Not yet checked on a device.

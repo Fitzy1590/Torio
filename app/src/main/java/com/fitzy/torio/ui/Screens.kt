@@ -241,6 +241,7 @@ private fun BrowseScreen(vm: TorioViewModel) {
         "LibriVox" to "https://librivox.org",
         "Internet Archive" to "https://archive.org/details/audiobooks",
         "Loyal Books" to "https://www.loyalbooks.com",
+        "Audiobook Search (Google)" to "https://cse.google.com/cse?cx=006516753008110874046:cwbbza56vhd",
     )
     var url by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
