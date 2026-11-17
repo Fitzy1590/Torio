@@ -16,4 +16,5 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [ ] Not tested on a device: needs real TorBox key. AIOStreams search assumes a Stremio-style manifest with search catalogs.
 - [ ] Cover art + author lookup (none yet); chapter markers inside single M4B files
 - [ ] Release-signed APK (currently debug-signed)
+- [x] CI publishes a GitHub release (tag build-N) on every push (tag pushes are blocked in the cloud sandbox)
 - [ ] Phase 2: Windows sync implementing SyncRepository
