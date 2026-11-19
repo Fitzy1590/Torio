@@ -230,6 +230,7 @@ private fun SettingsScreen(vm: TorioViewModel) {
 private fun BrowseScreen(vm: TorioViewModel) {
     val sites = listOf(
         "AudiobookBay" to vm.settings.abbUrl,
+        "Full Length Audiobooks" to "https://fulllengthaudiobooks.com",
         "LibriVox" to "https://librivox.org",
         "Internet Archive" to "https://archive.org/details/audiobooks",
         "Loyal Books" to "https://www.loyalbooks.com",

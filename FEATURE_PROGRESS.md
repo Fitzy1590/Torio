@@ -15,7 +15,7 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 ## Done (v0.2.0)
 - [x] Search is audio-only: video releases (BluRay/x264/1080p/S01E01...) dropped; needs an audio codec or audiobook wording
 - [x] Results ranked by quality: FLAC > M4B > M4A/AAC/Opus/Ogg > MP3, then bitrate, then cached/seeders
-- [x] Browse tab: in-app browser for AudiobookBay (address editable in Settings), LibriVox, Internet Archive, Loyal Books; logins persist; tapping a magnet adds it to TorBox/Library
+- [x] Browse tab: in-app browser for AudiobookBay (address editable in Settings), Full Length Audiobooks, LibriVox, Internet Archive, Loyal Books; logins persist; tapping a magnet adds it to TorBox/Library
 
 ## Unverified / next
 - [ ] Not tested on a device: needs real TorBox key. AIOStreams search assumes a Stremio-style manifest with search catalogs.
