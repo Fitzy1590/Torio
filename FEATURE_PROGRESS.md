@@ -28,8 +28,8 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [ ] Not tested on a device: needs real TorBox key. AIOStreams search assumes a Stremio-style manifest with search catalogs.
 - [x] Cover art + author lookup via Open Library when a book is first streamed/downloaded (shown in player + mini player). Books saved before this need Stream/Download tapped again. Not device-tested.
 - [x] AIOStreams removed (Stremio = movies/series, no audiobooks). Replaced by TorBox usenet: cloud usenet list + usenet search + NZB add; tracks use torbox://id/file?u=1
-- [x] TorBox search errors (cloud, torrent, usenet) now always shown
-- [ ] Usenet endpoints/field names (usenet/search -> data.nzbs[].nzb, usenet/mylist, createusenetdownload, requestdl usenet_id) written from memory, NOT verified (docs host blocked in sandbox) or device-tested
+- [x] TorBox's search API (search-api.torbox.app) is dead (NXDOMAIN). Search now = your cloud (torrent + usenet) + free public indexes (Pirate Bay apibay cat 102, Knaben) + TorBox checkcached to mark "Instant". Each source reports its own error on screen.
+- [ ] apibay / Knaben / checkcached request + response shapes written from memory, NOT verified or device-tested. Usenet NZB-add path is unused until an NZB source exists.
 - [ ] Chapter markers inside single M4B files
 - [ ] Release-signed APK (currently debug-signed)
 - [x] CI publishes a GitHub release (tag build-N) on every push (tag pushes are blocked in the cloud sandbox)

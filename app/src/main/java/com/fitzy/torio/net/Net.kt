@@ -3,6 +3,7 @@ package com.fitzy.torio.net
 import kotlinx.serialization.json.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
 import java.util.Locale
 
@@ -83,7 +84,6 @@ private fun JsonObject.lng(k: String) = (this[k] as? JsonPrimitive)?.longOrNull 
 
 class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> String) {
     private val base = "https://api.torbox.app/v1/api"
-    private val searchBase = "https://search-api.torbox.app"
 
     private fun call(req: Request.Builder): JsonObject {
         val r = req.header("Authorization", "Bearer ${key()}").build()
@@ -106,8 +106,8 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         }
     }
 
-    /** Searches your cloud (torrents + usenet), then TorBox's torrent and usenet search. Errors are returned, not hidden. */
-    fun search(query: String): Pair<List<SourceResult>, List<String>> {
+    /** Searches your own cloud (torrents + usenet). Errors are returned, not hidden. */
+    fun searchCloud(query: String): Pair<List<SourceResult>, List<String>> {
         val errors = mutableListOf<String>()
         val words = query.lowercase().split(' ').filter { it.length > 1 }
         val mine = listOf(false, true).flatMap { nzb ->
@@ -120,25 +120,21 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
                         SourceParser.parseBitrate(t.name), 0, true, t.hash, null, t.id, nzb)
                 }
         }
-        val found = listOf(false, true).flatMap { nzb ->
-            runCatching {
-                val path = if (nzb) "usenet/search" else "torrents/search"
-                val o = call(Request.Builder().url("$searchBase/$path/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
-                val data = o["data"] as? JsonObject
-                val arr = (data?.get(if (nzb) "nzbs" else "torrents") as? JsonArray) ?: JsonArray(emptyList())
-                arr.mapNotNull { it as? JsonObject }.mapNotNull { t ->
-                    val title = t.str("raw_title") ?: t.str("title") ?: return@mapNotNull null
-                    val hash = t.str("hash")?.lowercase() ?: return@mapNotNull null
-                    val link = if (nzb) (t.str("nzb") ?: t.str("link") ?: return@mapNotNull null) else null
-                    if (!SourceParser.isAudiobook(title)) return@mapNotNull null
-                    SourceResult("${if (nzb) "us" else "ts"}:$hash", Provider.TORBOX_SEARCH, title, t.lng("size"), SourceParser.parseCodec(title),
-                        SourceParser.parseBitrate(title), t.lng("last_known_seeders").toInt(),
-                        (t["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, hash, null, null, nzb, link)
-                }
-            }.getOrElse { errors += "TorBox ${if (nzb) "usenet" else "torrent"} search: ${it.message}"; emptyList() }
+        return mine to errors
+    }
+
+    /** Which of these torrent hashes TorBox already has cached (instant to stream). */
+    fun cachedHashes(hashes: List<String>): Set<String> {
+        val out = mutableSetOf<String>()
+        hashes.chunked(40).forEach { chunk ->
+            val o = call(Request.Builder().url("$base/torrents/checkcached?hash=${chunk.joinToString(",")}&format=list"))
+            when (val d = o["data"]) {
+                is JsonArray -> d.mapNotNullTo(out) { e -> ((e as? JsonObject)?.str("hash") ?: (e as? JsonPrimitive)?.contentOrNull)?.lowercase() }
+                is JsonObject -> d.keys.mapTo(out) { it.lowercase() }
+                else -> {}
+            }
         }
-        val mineHashes = mine.mapNotNull { it.hash }.toSet()
-        return (mine + found.filter { it.hash !in mineHashes }) to errors
+        return out
     }
 
     /** Adds the torrent/NZB to the account if needed and returns it with its file list. */
@@ -170,5 +166,49 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         val url = if (usenet) "$base/usenet/requestdl?token=${enc(key())}&usenet_id=$id&file_id=$fileId&zip_link=false"
                   else "$base/torrents/requestdl?token=${enc(key())}&torrent_id=$id&file_id=$fileId&zip_link=false"
         return call(Request.Builder().url(url))["data"]?.jsonPrimitive?.contentOrNull ?: error("No download link")
+    }
+}
+
+/** Free public torrent indexes (no key). Each source fails on its own and reports its error. */
+class IndexSearchClient(private val http: OkHttpClient) {
+    fun search(query: String): Pair<List<SourceResult>, List<String>> {
+        val errors = mutableListOf<String>()
+        val a = runCatching { apibay(query) }.getOrElse { errors += "Pirate Bay index: ${it.message}"; emptyList() }
+        val b = runCatching { knaben(query) }.getOrElse { errors += "Knaben: ${it.message}"; emptyList() }
+        return (a + b).distinctBy { it.hash } to errors
+    }
+
+    private fun get(req: Request): JsonElement = http.newCall(req).execute().use {
+        if (!it.isSuccessful) error("HTTP ${it.code}")
+        Json.parseToJsonElement(it.body?.string().orEmpty())
+    }
+
+    private fun result(id: String, title: String, hash: String, size: Long, seeders: Int): SourceResult? {
+        // the audiobook-only filter still applies (drops video); indexes list these as audiobooks already, so allow bare titles
+        if (!SourceParser.isAudiobook("$title audiobook")) return null
+        return SourceResult("$id:$hash", Provider.TORBOX_SEARCH, title, size, SourceParser.parseCodec(title),
+            SourceParser.parseBitrate(title), seeders, false, hash)
+    }
+
+    /** Pirate Bay's public JSON API, category 102 = audio books. */
+    private fun apibay(query: String): List<SourceResult> {
+        val arr = get(Request.Builder().url("https://apibay.org/q.php?q=${enc(query)}&cat=102").build()) as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { it as? JsonObject }.mapNotNull { o ->
+            val hash = o.str("info_hash")?.lowercase()?.takeIf { h -> h.isNotBlank() && h.any { it != '0' } } ?: return@mapNotNull null
+            result("tpb", o.str("name") ?: return@mapNotNull null, hash, o.lng("size"), o.lng("seeders").toInt())
+        }
+    }
+
+    /** Knaben's open search API (aggregates many trackers). */
+    private fun knaben(query: String): List<SourceResult> {
+        val body = buildJsonObject {
+            put("search_type", "100%"); put("search_field", "title"); put("query", "$query audiobook")
+            put("order_by", "seeders"); put("order_direction", "desc"); put("size", 50); put("hide_unsafe", true)
+        }.toString().toRequestBody("application/json".toMediaType())
+        val hits = ((get(Request.Builder().url("https://api.knaben.org/v1").post(body).build()) as? JsonObject)?.get("hits") as? JsonArray) ?: return emptyList()
+        return hits.mapNotNull { it as? JsonObject }.mapNotNull { o ->
+            val hash = o.str("hash")?.lowercase()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            result("kn", o.str("title") ?: return@mapNotNull null, hash, o.lng("bytes"), o.lng("seeders").toInt())
+        }
     }
 }

@@ -103,7 +103,7 @@ private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onD
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(listOf("🔴", "🟡", "🟢")[r.health] + " " + when (r.provider) {
-                    Provider.TORBOX_CLOUD -> "⚡ TorBox Cloud"; Provider.TORBOX_SEARCH -> if (r.cached) "⚡ TorBox Cached" else "TorBox"
+                    Provider.TORBOX_CLOUD -> "⚡ TorBox Cloud"; Provider.TORBOX_SEARCH -> if (r.cached) "⚡ TorBox Cached" else "Torrent"
                 } + if (r.usenet) " · Usenet" else "", style = MaterialTheme.typography.labelLarge)
             }
             Text(r.title, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(vertical = 4.dp))

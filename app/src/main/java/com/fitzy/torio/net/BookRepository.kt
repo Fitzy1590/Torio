@@ -8,13 +8,18 @@ import kotlinx.serialization.json.*
 /** Turns a picked source into a saved book with playable tracks. Blocking: call from Dispatchers.IO. */
 class BookRepository(private val c: AppContainer) {
     private val torbox = TorBoxApiClient(c.http) { c.settings.torboxKey }
+    private val index = IndexSearchClient(c.http)
 
     fun search(q: String): Pair<List<SourceResult>, List<String>> {
-        val errors = mutableListOf<String>()
-        val tb = if (c.settings.torboxKey.isBlank()) { errors += "Add your TorBox key in Settings"; emptyList() }
-                 else runCatching { torbox.search(q) }.getOrElse { errors += it.message ?: "TorBox failed"; emptyList<SourceResult>() to emptyList() }
-                     .also { errors += it.second }.first
-        val all = tb.filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
+        if (c.settings.torboxKey.isBlank()) return emptyList<SourceResult>() to listOf("Add your TorBox key in Settings")
+        val (cloud, errors) = torbox.searchCloud(q).let { it.first to it.second.toMutableList() }
+        val (found, idxErrors) = index.search(q)
+        errors += idxErrors
+        val cached = runCatching { torbox.cachedHashes(found.mapNotNull { it.hash }.distinct()) }
+            .getOrElse { errors += "TorBox cache check: ${it.message}"; emptySet() }
+        val mine = cloud.mapNotNull { it.hash }.toSet()
+        val fresh = found.filter { it.hash !in mine }.map { if (it.hash in cached) it.copy(cached = true) else it }
+        val all = (cloud + fresh).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
         return all.sortedWith(compareByDescending<SourceResult> { it.quality }.thenByDescending { it.health }.thenByDescending { it.cached }.thenByDescending { it.seeders }) to errors
     }
 
