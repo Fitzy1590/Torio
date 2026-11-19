@@ -8,7 +8,10 @@ import okhttp3.OkHttpClient
 class AppContainer(app: Application) {
     val db = Room.databaseBuilder(app, TorioDatabase::class.java, "torio.db").build()
     val settings = Settings(app)
-    val http: OkHttpClient = OkHttpClient()
+    val http: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     val sync: SyncRepository = LocalSyncRepository(db.progressDao())
 }
 

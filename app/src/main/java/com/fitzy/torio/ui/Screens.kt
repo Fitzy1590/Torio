@@ -126,7 +126,7 @@ private fun LibraryScreen(vm: TorioViewModel, goPlayer: () -> Unit) {
     val names = listOf("In progress", "Downloaded", "Finished")
     val shown = books.filter { b ->
         val p = prog[b.id]
-        when (section) { 0 -> p != null && !p.finished && p.percent > 0 || (p == null && !b.downloaded)
+        when (section) { 0 -> p != null && !p.finished || (p == null && !b.downloaded)
             1 -> b.downloaded; else -> p?.finished == true }
     }
     Column(Modifier.fillMaxSize()) {

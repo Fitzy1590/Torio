@@ -99,11 +99,15 @@ class Media3AudioService : MediaSessionService() {
         val tracks = c.db.bookDao().tracks(bookId)
         val idx = player.currentMediaItemIndex
         val pos = player.currentPosition.coerceAtLeast(0)
-        val before = tracks.take(idx).sumOf { it.durationMs }
-        val total = tracks.sumOf { if (it.durationMs > 0) it.durationMs else 0 }.takeIf { it > 0 } ?: player.duration.coerceAtLeast(0)
+        // Durations are learned as tracks load; guess unknown ones from the average so percent doesn't jump or hit 100 early.
+        val known = tracks.filter { it.durationMs > 0 }.map { it.durationMs }
+        val avg = if (known.isNotEmpty()) known.average().toLong() else player.duration.coerceAtLeast(0)
+        fun len(i: Int) = tracks.getOrNull(i)?.durationMs?.takeIf { it > 0 } ?: avg
+        val before = (0 until idx).sumOf { len(it) }
+        val total = tracks.indices.sumOf { len(it) }.coerceAtLeast(player.duration.coerceAtLeast(0))
         val abs = before + pos
         val pct = if (total > 0) ((abs * 100) / total).toInt().coerceIn(0, 100) else 0
-        val done = finished || pct >= 99
+        val done = finished || (idx == tracks.lastIndex && pct >= 99)
         c.sync.saveProgress(ProgressEntity(bookId, idx, pos, abs, total, if (done) 100 else pct, done))
         c.settings.lastBookId = bookId
     }
