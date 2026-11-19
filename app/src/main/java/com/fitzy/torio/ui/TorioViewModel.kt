@@ -37,7 +37,15 @@ class TorioViewModel(app: Application) : AndroidViewModel(app) {
     val progress: StateFlow<Map<String, ProgressEntity>> =
         c.db.progressDao().all().map { l -> l.associateBy { it.bookId } }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    init { viewModelScope.launch { player.autoResume() } }
+    init {
+        viewModelScope.launch { player.autoResume() }
+        // Books saved before cover lookup worked: try again in the background.
+        viewModelScope.launch(Dispatchers.IO) {
+            c.db.bookDao().books().first().filter { it.coverUrl == null }.forEach { b ->
+                repo.backfillCover(b)?.let { player.updateCover(b.id, it) }
+            }
+        }
+    }
 
     fun runSearch(q: String) {
         if (q.isBlank()) return
@@ -77,7 +85,10 @@ class TorioViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun play(b: BookEntity) = viewModelScope.launch { player.open(b.id, play = true) }
+    /** Opens the book unless it is already loaded in the player (then just resume without reloading). */
+    fun play(b: BookEntity) = viewModelScope.launch {
+        if (player.ui.value.bookId == b.id) { if (!player.ui.value.isPlaying) player.toggle() } else player.open(b.id, play = true)
+    }
 
     fun download(b: BookEntity) = DownloadWorker.enqueue(getApplication(), b.id)
 

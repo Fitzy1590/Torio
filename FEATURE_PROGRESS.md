@@ -34,3 +34,8 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [ ] Release-signed APK (currently debug-signed)
 - [x] CI publishes a GitHub release (tag build-N) on every push (tag pushes are blocked in the cloud sandbox)
 - [ ] Phase 2: Windows sync implementing SyncRepository
+
+## Done (v0.2.2)
+- [x] Library: tapping a book card opens the Player; if it is already loaded it is not reloaded
+- [x] Artwork: lookup now tries iTunes audiobooks then Open Library with cleaned title variants (drops "Chapterized", "Easier Listen" etc.); old books without a cover are retried at launch; covers shown on Library cards. Not device-tested.
+- [ ] Some sources fail to stream but download fine: cause not yet found (need the on-screen error)

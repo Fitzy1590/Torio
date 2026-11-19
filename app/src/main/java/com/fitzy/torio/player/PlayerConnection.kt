@@ -89,6 +89,9 @@ class PlayerConnection(private val ctx: Context, private val c: AppContainer) {
         c.settings.lastBookId = id
     }
 
+    /** Cover found after the book was already opened. */
+    fun updateCover(id: String, url: String?) { if (bookId == id) meta = meta.copy(third = url) }
+
     /** Auto-resume on launch: reopens the most recently played unfinished book at its exact position. */
     suspend fun autoResume() {
         val p = c.sync.latestProgress() ?: return

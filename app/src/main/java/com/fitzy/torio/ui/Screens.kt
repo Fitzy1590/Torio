@@ -124,6 +124,7 @@ private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onD
 private fun LibraryScreen(vm: TorioViewModel, goPlayer: () -> Unit) {
     val books by vm.books.collectAsStateWithLifecycle()
     val prog by vm.progress.collectAsStateWithLifecycle()
+    val cur by vm.player.ui.collectAsStateWithLifecycle()
     var section by remember { mutableIntStateOf(0) }
     val names = listOf("In progress", "Downloaded", "Finished")
     val shown = books.filter { b ->
@@ -137,18 +138,27 @@ private fun LibraryScreen(vm: TorioViewModel, goPlayer: () -> Unit) {
         LazyColumn(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shown, key = { it.id }) { b ->
                 val p = prog[b.id]
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
+                Card(Modifier.fillMaxWidth().clickable { vm.play(b); goPlayer() }) {
+                  Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(Modifier.size(72.dp).clip(MaterialTheme.shapes.small), tonalElevation = 4.dp) {
+                        if (b.coverUrl != null) AsyncImage(b.coverUrl, "Cover", contentScale = ContentScale.Crop)
+                        else Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Headphones, null, Modifier.size(32.dp)) }
+                    }
+                    Column(Modifier.weight(1f)) {
                         Text(b.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                         Text("${b.codec} | ${formatSize(b.sizeBytes)}" + if (b.downloaded) " | Offline" else " | Streaming", style = MaterialTheme.typography.bodySmall)
                         if (p != null) LinearProgressIndicator(progress = { p.percent / 100f }, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            FilledTonalButton({ vm.play(b); goPlayer() }) { Icon(Icons.Default.PlayArrow, null); Text(if (p?.percent ?: 0 > 0) "Resume ${p?.percent}%" else "Play") }
+                            FilledTonalButton({ vm.play(b); goPlayer() }) {
+                                Icon(if (cur.bookId == b.id && cur.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null)
+                                Text(if (cur.bookId == b.id) (if (cur.isPlaying) "Playing" else "Resume") else if (p?.percent ?: 0 > 0) "Resume ${p?.percent}%" else "Play")
+                            }
                             if (!b.downloaded) IconButton({ vm.download(b) }) { Icon(Icons.Default.Download, "Download") }
                             IconButton({ vm.markFinished(b, p?.finished != true) }) { Icon(Icons.Default.CheckCircle, "Toggle finished") }
                             IconButton({ vm.delete(b) }) { Icon(Icons.Default.Delete, "Delete") }
                         }
                     }
+                  }
                 }
             }
         }

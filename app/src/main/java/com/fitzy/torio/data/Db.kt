@@ -51,6 +51,8 @@ interface BookDao {
     @Query("SELECT * FROM books ORDER BY addedAt DESC") fun books(): Flow<List<BookEntity>>
     @Query("UPDATE tracks SET localPath=:path WHERE bookId=:id AND idx=:idx")
     suspend fun setLocalPath(id: String, idx: Int, path: String)
+    @Query("UPDATE books SET coverUrl=:cover, author=CASE WHEN author='' THEN :author ELSE author END WHERE id=:id")
+    suspend fun setCover(id: String, cover: String?, author: String)
     @Query("UPDATE books SET downloaded=:d WHERE id=:id") suspend fun setDownloaded(id: String, d: Boolean)
     @Query("UPDATE tracks SET durationMs=:ms WHERE bookId=:id AND idx=:idx")
     suspend fun setDuration(id: String, idx: Int, ms: Long)

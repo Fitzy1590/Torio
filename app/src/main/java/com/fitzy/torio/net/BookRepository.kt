@@ -43,20 +43,46 @@ class BookRepository(private val c: AppContainer) {
         return id
     }
 
-    /** Best-effort author + cover from Open Library (title only is sent). Returns "" / null on any failure. */
-    private fun lookupCover(title: String): Pair<String, String?> = runCatching {
-        val q = title.replace(Regex("""[\[(].*?[\])]"""), " ")
-            .replace(Regex("""(?i)\b(unabridged|abridged|audiobook|fully chaptered|m4b|mp3|flac)\b"""), " ")
-            .replace(Regex("""\s+"""), " ").trim()
-        val url = "https://openlibrary.org/search.json?limit=1&fields=cover_i,author_name&q=" + java.net.URLEncoder.encode(q, "UTF-8")
-        val doc = c.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use {
-            if (!it.isSuccessful) return@runCatching "" to null
-            kotlinx.serialization.json.Json.parseToJsonElement(it.body?.string().orEmpty()).jsonObject["docs"]?.jsonArray?.firstOrNull()?.jsonObject
+    /** Fills in a missing cover/author for an already-saved book. Returns the cover url if one was found. */
+    suspend fun backfillCover(b: com.fitzy.torio.data.BookEntity): String? {
+        if (b.coverUrl != null) return null
+        val (author, cover) = lookupCover(b.title)
+        if (cover == null && (author.isBlank() || b.author.isNotBlank())) return null
+        c.db.bookDao().setCover(b.id, cover, author)
+        return cover
+    }
+
+    /** Best-effort author + cover (title only is sent): iTunes audiobooks first, then Open Library. Returns "" / null on failure. */
+    private fun lookupCover(title: String): Pair<String, String?> {
+        val parts = title.replace(Regex("""[\[(].*?[\])]"""), " ")
+            .replace(Regex("""(?i)\b(unabridged|abridged|audiobook|fully chaptered|chapterized|chaptered|easier listen|m4b|mp3|flac|\d+\s?kbps)\b"""), " ")
+            .split(Regex("""\s+-\s+""")).map { it.replace(Regex("""\s+"""), " ").trim(' ', '-') }.filter { it.isNotBlank() }
+        val queries = listOfNotNull(parts.joinToString(" "), parts.drop(1).firstOrNull(), parts.firstOrNull()).distinct().filter { it.isNotBlank() }
+        var author = ""
+        for (q in queries) itunes(q)?.let { (a, cv) -> if (author.isBlank()) author = a; if (cv != null) return author to cv }
+        for (q in queries) openLibrary(q)?.let { (a, cv) -> if (author.isBlank()) author = a; if (cv != null) return author to cv }
+        return author to null
+    }
+
+    private fun getJson(url: String): JsonObject? = runCatching {
+        c.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use {
+            if (!it.isSuccessful) null else Json.parseToJsonElement(it.body?.string().orEmpty()).jsonObject
         }
-        val author = doc?.get("author_name")?.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull.orEmpty()
-        val cover = doc?.get("cover_i")?.jsonPrimitive?.longOrNull?.let { "https://covers.openlibrary.org/b/id/$it-L.jpg" }
-        author to cover
-    }.getOrDefault("" to null)
+    }.getOrNull()
+
+    private fun itunes(q: String): Pair<String, String?>? {
+        val url = "https://itunes.apple.com/search?media=audiobook&limit=1&term=" + java.net.URLEncoder.encode(q, "UTF-8")
+        val r = getJson(url)?.get("results")?.jsonArray?.firstOrNull()?.jsonObject ?: return null
+        val art = r["artworkUrl100"]?.jsonPrimitive?.contentOrNull?.replace("100x100bb", "600x600bb")
+        return r["artistName"]?.jsonPrimitive?.contentOrNull.orEmpty() to art
+    }
+
+    private fun openLibrary(q: String): Pair<String, String?>? {
+        val url = "https://openlibrary.org/search.json?limit=1&fields=cover_i,author_name&q=" + java.net.URLEncoder.encode(q, "UTF-8")
+        val doc = getJson(url)?.get("docs")?.jsonArray?.firstOrNull()?.jsonObject ?: return null
+        val cover = doc["cover_i"]?.jsonPrimitive?.longOrNull?.let { "https://covers.openlibrary.org/b/id/$it-L.jpg" }
+        return doc["author_name"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull.orEmpty() to cover
+    }
 
     private fun naturalOrder() = Comparator<TorBoxFile> { a, b -> collate(a.name, b.name) }
     private fun collate(a: String, b: String): Int {
