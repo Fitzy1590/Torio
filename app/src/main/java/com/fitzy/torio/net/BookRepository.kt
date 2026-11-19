@@ -30,8 +30,9 @@ class BookRepository(private val c: AppContainer) {
         val tracks: List<TrackEntity> = when {
             s.directUrl != null -> listOf(TrackEntity(id, 0, s.title, s.directUrl))
             else -> {
-                val t = torbox.ensureInAccount(s.hash!!, s.title, s.usenet, s.nzbUrl)
+                val t = torbox.ensureInAccount(s.hash!!, s.title, s.usenet, s.nzbUrl, s.torboxId)
                 val files = t.files.filter { isAudioFile(it.name) }.sortedWith(naturalOrder())
+                if (files.isEmpty()) error("No audio files found in this source (${t.files.size} files: ${t.files.take(3).joinToString { it.name.takeLast(30) }})")
                 files.mapIndexed { i, f -> TrackEntity(id, i, f.name.substringBeforeLast('.'), "torbox://${t.id}/${f.id}${if (s.usenet) "?u=1" else ""}") }
             }
         }

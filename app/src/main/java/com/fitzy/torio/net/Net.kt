@@ -94,8 +94,10 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         }
     }
 
-    fun myList(usenet: Boolean = false): List<TorBoxTorrent> {
-        val arr = call(Request.Builder().url("$base/${if (usenet) "usenet" else "torrents"}/mylist"))["data"] as? JsonArray ?: return emptyList()
+    fun myList(usenet: Boolean = false, id: Long? = null, fresh: Boolean = false): List<TorBoxTorrent> {
+        val q = listOfNotNull(id?.let { "id=$it" }, if (fresh) "bypass_cache=true" else null).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
+        val data = call(Request.Builder().url("$base/${if (usenet) "usenet" else "torrents"}/mylist$q"))["data"]
+        val arr = when (data) { is JsonArray -> data; is JsonObject -> JsonArray(listOf(data)); else -> return emptyList() }
         return arr.mapNotNull { it as? JsonObject }.map { o ->
             TorBoxTorrent(
                 o.lng("id"), o.str("name") ?: "", (o.str("hash") ?: "").lowercase(), o.lng("size"),
@@ -138,20 +140,24 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
     }
 
     /** Adds the torrent/NZB to the account if needed and returns it with its file list. */
-    fun ensureInAccount(hash: String, title: String, usenet: Boolean = false, nzbUrl: String? = null): TorBoxTorrent {
-        val existing = myList(usenet).firstOrNull { it.hash == hash.lowercase() }
+    fun ensureInAccount(hash: String, title: String, usenet: Boolean = false, nzbUrl: String? = null, knownId: Long? = null): TorBoxTorrent {
+        fun find(id: Long?) = myList(usenet, fresh = true).firstOrNull { if (id != null) it.id == id else it.hash == hash.lowercase() }
+        var id = knownId
+        val existing = find(id)
         if (existing?.files?.isNotEmpty() == true) return existing
         if (existing == null) {
-            if (usenet) {
+            val resp = if (usenet) {
                 val form = FormBody.Builder().add("link", nzbUrl ?: error("No NZB link for this result")).add("name", title).build()
                 call(Request.Builder().url("$base/usenet/createusenetdownload").post(form))
             } else {
                 val form = FormBody.Builder().add("magnet", "magnet:?xt=urn:btih:$hash&dn=${enc(title)}").add("seed", "3").build()
                 call(Request.Builder().url("$base/torrents/createtorrent").post(form))
             }
+            val d = resp["data"] as? JsonObject
+            id = d?.lng("torrent_id")?.takeIf { it > 0 } ?: d?.lng("usenetdownload_id")?.takeIf { it > 0 } ?: id
         }
         repeat(10) {
-            myList(usenet).firstOrNull { it.hash == hash.lowercase() && it.files.isNotEmpty() }?.let { return it }
+            find(id)?.takeIf { it.files.isNotEmpty() }?.let { return it }
             Thread.sleep(1500)
         }
         error("TorBox is still preparing this ${if (usenet) "usenet download" else "torrent"}. Try again in a minute.")
