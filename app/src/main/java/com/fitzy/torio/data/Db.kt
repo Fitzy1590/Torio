@@ -113,6 +113,9 @@ class Settings(ctx: Context) {
     var autoResume: Boolean
         get() = sp.getBoolean("auto_resume", true)
         set(v) = sp.edit().putBoolean("auto_resume", v).apply()
+    var autoUpdate: Boolean
+        get() = sp.getBoolean("auto_update", true)
+        set(v) = sp.edit().putBoolean("auto_update", v).apply()
     var lastBookId: String?
         get() = sp.getString("last_book", null)
         set(v) = sp.edit().putString("last_book", v).apply()

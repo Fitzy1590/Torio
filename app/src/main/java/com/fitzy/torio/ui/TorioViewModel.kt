@@ -25,6 +25,16 @@ data class SearchState(
     val busyId: String? = null,
 )
 
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data object UpToDate : UpdateState
+    data class Available(val info: com.fitzy.torio.net.UpdateInfo, val note: String? = null) : UpdateState
+    data class Downloading(val info: com.fitzy.torio.net.UpdateInfo) : UpdateState
+    data class Ready(val info: com.fitzy.torio.net.UpdateInfo, val file: File) : UpdateState
+    data class Failed(val message: String) : UpdateState
+}
+
 class TorioViewModel(app: Application) : AndroidViewModel(app) {
     private val c = (app as TorioApp).container
     private val repo = BookRepository(c)
@@ -37,7 +47,39 @@ class TorioViewModel(app: Application) : AndroidViewModel(app) {
     val progress: StateFlow<Map<String, ProgressEntity>> =
         c.db.progressDao().all().map { l -> l.associateBy { it.bookId } }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val update = _update.asStateFlow()
+
+    /** [auto]: also download the new build straight away so the installer can open. */
+    fun checkForUpdates(auto: Boolean) {
+        if (_update.value is UpdateState.Checking || _update.value is UpdateState.Downloading) return
+        viewModelScope.launch {
+            _update.value = UpdateState.Checking
+            try {
+                val info = com.fitzy.torio.net.Updater.check(c.http, com.fitzy.torio.net.Updater.currentBuild(getApplication()))
+                if (info == null) _update.value = UpdateState.UpToDate
+                else if (auto) downloadUpdate(info) else _update.value = UpdateState.Available(info)
+            } catch (e: Exception) {
+                _update.value = UpdateState.Failed(e.message ?: "Update check failed")
+            }
+        }
+    }
+
+    fun downloadUpdate(info: com.fitzy.torio.net.UpdateInfo) {
+        viewModelScope.launch {
+            _update.value = UpdateState.Downloading(info)
+            _update.value = try {
+                UpdateState.Ready(info, com.fitzy.torio.net.Updater.download(getApplication(), c.http, info))
+            } catch (e: Exception) { UpdateState.Failed(e.message ?: "Download failed") }
+        }
+    }
+
+    fun installLaunched(info: com.fitzy.torio.net.UpdateInfo, opened: Boolean) {
+        _update.value = UpdateState.Available(info, if (opened) null else "Allow Torio to install apps, then tap Update again.")
+    }
+
     init {
+        if (settings.autoUpdate) checkForUpdates(auto = true)
         viewModelScope.launch { player.autoResume() }
         // Books saved before cover lookup worked: try again in the background.
         viewModelScope.launch(Dispatchers.IO) {

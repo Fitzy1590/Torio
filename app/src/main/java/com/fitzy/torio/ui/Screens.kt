@@ -33,6 +33,12 @@ private enum class Tab(val label: String) { Search("Search"), Browse("Browse"), 
 fun TorioRoot(vm: TorioViewModel) {
     MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
         var tab by remember { mutableStateOf(Tab.Search) }
+        val upd by vm.update.collectAsStateWithLifecycle()
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        // Downloaded update is ready: open the system installer (the user confirms there).
+        LaunchedEffect(upd) {
+            (upd as? UpdateState.Ready)?.let { vm.installLaunched(it.info, com.fitzy.torio.net.Updater.install(ctx, it.file)) }
+        }
         val p by vm.player.ui.collectAsStateWithLifecycle()
         LaunchedEffect(p.bookId) { if (p.bookId != null && tab == Tab.Search && p.isPlaying) { /* stay */ } }
         Scaffold(
@@ -224,12 +230,35 @@ private fun SettingsScreen(vm: TorioViewModel) {
     var key by remember { mutableStateOf(s.torboxKey) }
     var abb by remember { mutableStateOf(s.abbUrl) }
     var auto by remember { mutableStateOf(s.autoResume) }
+    var autoUpd by remember { mutableStateOf(s.autoUpdate) }
+    val upd by vm.update.collectAsStateWithLifecycle()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(key, { key = it; s.torboxKey = it }, label = { Text("TorBox API key") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
         OutlinedTextField(abb, { abb = it; s.abbUrl = it }, label = { Text("AudiobookBay address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Auto-resume on launch", Modifier.weight(1f)); Switch(auto, { auto = it; s.autoResume = it })
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Auto-update on launch", Modifier.weight(1f)); Switch(autoUpd, { autoUpd = it; s.autoUpdate = it })
+        }
+        Text("Torio build ${com.fitzy.torio.net.Updater.currentBuild(ctx)}", style = MaterialTheme.typography.bodySmall)
+        when (val u = upd) {
+            is UpdateState.Checking -> Text("Checking for updates...")
+            is UpdateState.UpToDate -> Text("You're on the latest build.")
+            is UpdateState.Downloading -> Text("Downloading build ${u.info.build}...")
+            is UpdateState.Failed -> Text(u.message, color = MaterialTheme.colorScheme.error)
+            is UpdateState.Available -> {
+                Text("Build ${u.info.build} is available." + (u.note?.let { " $it" } ?: ""))
+                Button({ vm.downloadUpdate(u.info) }, Modifier.fillMaxWidth()) { Text("Update to build ${u.info.build}") }
+            }
+            else -> {}
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton({ vm.checkForUpdates(auto = false) }, Modifier.weight(1f)) { Text("Check for updates") }
+            OutlinedButton({ uri.openUri((upd as? UpdateState.Available)?.info?.pageUrl ?: com.fitzy.torio.net.RELEASES_PAGE) }, Modifier.weight(1f)) { Text("View on GitHub") }
         }
     }
 }

@@ -13,10 +13,22 @@ android {
         applicationId = "com.fitzy.torio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI passes the run number so every build is newer than the last (the updater compares this).
+        val code = (project.findProperty("torioVersionCode") as String?)?.toInt() ?: 1
+        versionCode = code
+        versionName = "build-$code"
+    }
+    // One fixed key for every build, otherwise Android refuses to install an update over the old app.
+    signingConfigs {
+        create("torio") {
+            storeFile = file("torio-update.keystore")
+            storePassword = "torio-update"
+            keyAlias = "torio"
+            keyPassword = "torio-update"
+        }
     }
     buildTypes {
+        debug { signingConfig = signingConfigs.getByName("torio") }
         release { isMinifyEnabled = false }
     }
     compileOptions {

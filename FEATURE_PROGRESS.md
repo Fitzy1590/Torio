@@ -39,3 +39,10 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [x] Library: tapping a book card opens the Player; if it is already loaded it is not reloaded
 - [x] Artwork: lookup now tries iTunes audiobooks then Open Library with cleaned title variants (drops "Chapterized", "Easier Listen" etc.); old books without a cover are retried at launch; covers shown on Library cards. Not device-tested.
 - [ ] Some sources fail to stream but download fine: cause not yet found (need the on-screen error)
+
+## Done (v0.3.0, auto-update)
+- [x] Every build is signed with one fixed key (app/torio-update.keystore, committed on purpose) and versionCode = CI run number
+- [x] Release workflow: pushes to main publish the normal "latest" release; other branches publish prereleases only
+- [x] On launch the app checks the latest GitHub release (tag build-N), downloads the APK and opens the Android installer (Android always asks you to confirm; first time it also asks to allow installs from Torio)
+- [x] Settings: "Auto-update on launch" switch, "Check for updates", "View on GitHub", current build number. Not device-tested.
+- Note: builds made before this have a different signing key; uninstall once, then install the first new build. Updates work from then on.
