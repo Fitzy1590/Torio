@@ -7,7 +7,7 @@ Kotlin, Jetpack Compose M3, Media3 (ExoPlayer + MediaSessionService), Room (KSP)
 
 ## Layout (app/src/main/java/com/fitzy/torio)
 - `data/` Room entities/DAO/DB, `SyncRepository` (Phase 2 hook; only `LocalSyncRepository` exists), `Settings`
-- `net/` `TorBoxApiClient`, `AioStreamsClient`, `SourceParser`, `SourceResult`
+- `net/` `TorBoxApiClient`, `SourceParser`, `SourceResult`
 - `player/` `Media3AudioService`, `VoiceDspEnhancer`, `PlayerConnection`, `DownloadWorker`
 - `ui/` Compose screens + ViewModels
 

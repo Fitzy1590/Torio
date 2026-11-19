@@ -8,15 +8,13 @@ import kotlinx.serialization.json.*
 /** Turns a picked source into a saved book with playable tracks. Blocking: call from Dispatchers.IO. */
 class BookRepository(private val c: AppContainer) {
     private val torbox = TorBoxApiClient(c.http) { c.settings.torboxKey }
-    private val aio = AioStreamsClient(c.http) { c.settings.aioUrl }
 
     fun search(q: String): Pair<List<SourceResult>, List<String>> {
         val errors = mutableListOf<String>()
         val tb = if (c.settings.torboxKey.isBlank()) { errors += "Add your TorBox key in Settings"; emptyList() }
-                 else runCatching { torbox.search(q) }.getOrElse { errors += it.message ?: "TorBox failed"; emptyList() }
-        val ai = if (c.settings.aioUrl.isBlank()) emptyList()
-                 else runCatching { aio.search(q) }.getOrElse { errors += it.message ?: "AIOStreams failed"; emptyList() }
-        val all = (tb + ai).filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
+                 else runCatching { torbox.search(q) }.getOrElse { errors += it.message ?: "TorBox failed"; emptyList<SourceResult>() to emptyList() }
+                     .also { errors += it.second }.first
+        val all = tb.filter { it.sizeBytes == 0L || it.sizeBytes > 5L shl 20 }
         return all.sortedWith(compareByDescending<SourceResult> { it.quality }.thenByDescending { it.health }.thenByDescending { it.cached }.thenByDescending { it.seeders }) to errors
     }
 
@@ -27,9 +25,9 @@ class BookRepository(private val c: AppContainer) {
         val tracks: List<TrackEntity> = when {
             s.directUrl != null -> listOf(TrackEntity(id, 0, s.title, s.directUrl))
             else -> {
-                val t = torbox.ensureInAccount(s.hash!!, s.title)
+                val t = torbox.ensureInAccount(s.hash!!, s.title, s.usenet, s.nzbUrl)
                 val files = t.files.filter { isAudioFile(it.name) }.sortedWith(naturalOrder())
-                files.mapIndexed { i, f -> TrackEntity(id, i, f.name.substringBeforeLast('.'), "torbox://${t.id}/${f.id}") }
+                files.mapIndexed { i, f -> TrackEntity(id, i, f.name.substringBeforeLast('.'), "torbox://${t.id}/${f.id}${if (s.usenet) "?u=1" else ""}") }
             }
         }
         if (tracks.isEmpty()) error("No audio files found in this source")

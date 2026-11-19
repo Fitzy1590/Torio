@@ -99,9 +99,6 @@ class Settings(ctx: Context) {
     var torboxKey: String
         get() = sp.getString("torbox_key", "") ?: ""
         set(v) = sp.edit().putString("torbox_key", v.trim()).apply()
-    var aioUrl: String
-        get() = sp.getString("aio_url", "") ?: ""
-        set(v) = sp.edit().putString("aio_url", v.trim()).apply()
     var abbUrl: String
         get() = sp.getString("abb_url", "https://audiobookbay.lu") ?: "https://audiobookbay.lu"
         set(v) = sp.edit().putString("abb_url", v.trim().trimEnd('/')).apply()

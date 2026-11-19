@@ -104,7 +104,7 @@ private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onD
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(listOf("🔴", "🟡", "🟢")[r.health] + " " + when (r.provider) {
                     Provider.TORBOX_CLOUD -> "⚡ TorBox Cloud"; Provider.TORBOX_SEARCH -> if (r.cached) "⚡ TorBox Cached" else "TorBox"
-                    Provider.AIOSTREAMS -> "🌐 AIOStreams" }, style = MaterialTheme.typography.labelLarge)
+                } + if (r.usenet) " · Usenet" else "", style = MaterialTheme.typography.labelLarge)
             }
             Text(r.title, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(vertical = 4.dp))
             val rate = if (r.bitrateKbps > 0) " | ${r.bitrateKbps}kbps" else ""
@@ -212,13 +212,11 @@ private fun Modifier.clickableNoRipple(f: () -> Unit) = this.then(Modifier.click
 private fun SettingsScreen(vm: TorioViewModel) {
     val s = vm.settings
     var key by remember { mutableStateOf(s.torboxKey) }
-    var aio by remember { mutableStateOf(s.aioUrl) }
     var abb by remember { mutableStateOf(s.abbUrl) }
     var auto by remember { mutableStateOf(s.autoResume) }
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(key, { key = it; s.torboxKey = it }, label = { Text("TorBox API key") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
-        OutlinedTextField(aio, { aio = it; s.aioUrl = it }, label = { Text("AIOStreams manifest URL (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(abb, { abb = it; s.abbUrl = it }, label = { Text("AudiobookBay address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Auto-resume on launch", Modifier.weight(1f)); Switch(auto, { auto = it; s.autoResume = it })

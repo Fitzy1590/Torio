@@ -36,9 +36,7 @@ class Media3AudioService : MediaSessionService() {
         val http = OkHttpDataSource.Factory(c.http)
         val resolving = ResolvingDataSource.Factory(http) { spec: DataSpec ->
             if (spec.uri.scheme == "torbox") {
-                val seg = spec.uri.pathSegments
-                val url = torbox.requestLink(spec.uri.host!!.toLong(), seg[0].toLong())
-                spec.withUri(Uri.parse(url))
+                spec.withUri(Uri.parse(torbox.resolve(spec.uri)))
             } else spec
         }
         val load = DefaultLoadControl.Builder()

@@ -6,7 +6,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import java.net.URLEncoder
 import java.util.Locale
 
-enum class Provider { TORBOX_CLOUD, TORBOX_SEARCH, AIOSTREAMS }
+enum class Provider { TORBOX_CLOUD, TORBOX_SEARCH }
 
 /** One row in the source picker. Either [hash] (needs TorBox) or [directUrl] is set. */
 data class SourceResult(
@@ -21,6 +21,8 @@ data class SourceResult(
     val hash: String? = null,
     val directUrl: String? = null,
     val torboxId: Long? = null,
+    val usenet: Boolean = false,
+    val nzbUrl: String? = null,
 ) {
     /** 0 = bad, 1 = ok, 2 = great */
     val health: Int get() = when {
@@ -92,8 +94,8 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         }
     }
 
-    fun myList(): List<TorBoxTorrent> {
-        val arr = call(Request.Builder().url("$base/torrents/mylist"))["data"] as? JsonArray ?: return emptyList()
+    fun myList(usenet: Boolean = false): List<TorBoxTorrent> {
+        val arr = call(Request.Builder().url("$base/${if (usenet) "usenet" else "torrents"}/mylist"))["data"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { it as? JsonObject }.map { o ->
             TorBoxTorrent(
                 o.lng("id"), o.str("name") ?: "", (o.str("hash") ?: "").lowercase(), o.lng("size"),
@@ -104,95 +106,69 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
         }
     }
 
-    /** Searches the user's own cloud first, then TorBox's search index. */
-    fun search(query: String): List<SourceResult> {
-        val q = query.lowercase()
-        val mine = runCatching { myList() }.getOrDefault(emptyList())
-            .filter { t -> q.split(' ').filter { it.length > 1 }.all { t.name.lowercase().contains(it) } }
-            .mapNotNull { t ->
-                val meta = t.name + " " + t.files.joinToString(" ") { it.name }
-                if (!SourceParser.isAudiobook(meta)) return@mapNotNull null
-                SourceResult("cloud:${t.id}", Provider.TORBOX_CLOUD, t.name, t.size, SourceParser.parseCodec(meta),
-                    SourceParser.parseBitrate(t.name), 0, true, t.hash, null, t.id)
-            }
-        val foundResult = runCatching {
-            val o = call(Request.Builder().url("$searchBase/torrents/search/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
-            val arr = (o["data"] as? JsonObject)?.get("torrents") as? JsonArray ?: JsonArray(emptyList())
-            arr.mapNotNull { it as? JsonObject }.mapNotNull { t ->
-                val title = t.str("raw_title") ?: t.str("title") ?: return@mapNotNull null
-                val hash = t.str("hash")?.lowercase() ?: return@mapNotNull null
-                if (!SourceParser.isAudiobook(title)) return@mapNotNull null
-                SourceResult("ts:$hash", Provider.TORBOX_SEARCH, title, t.lng("size"), SourceParser.parseCodec(title),
-                    SourceParser.parseBitrate(title), t.lng("last_known_seeders").toInt(),
-                    (t["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, hash)
-            }
+    /** Searches your cloud (torrents + usenet), then TorBox's torrent and usenet search. Errors are returned, not hidden. */
+    fun search(query: String): Pair<List<SourceResult>, List<String>> {
+        val errors = mutableListOf<String>()
+        val words = query.lowercase().split(' ').filter { it.length > 1 }
+        val mine = listOf(false, true).flatMap { nzb ->
+            runCatching { myList(nzb) }.getOrElse { errors += "TorBox cloud: ${it.message}"; emptyList() }
+                .filter { t -> words.all { t.name.lowercase().contains(it) } }
+                .mapNotNull { t ->
+                    val meta = t.name + " " + t.files.joinToString(" ") { it.name }
+                    if (!SourceParser.isAudiobook(meta)) return@mapNotNull null
+                    SourceResult("cloud:${if (nzb) "u" else "t"}${t.id}", Provider.TORBOX_CLOUD, t.name, t.size, SourceParser.parseCodec(meta),
+                        SourceParser.parseBitrate(t.name), 0, true, t.hash, null, t.id, nzb)
+                }
         }
-        if (mine.isEmpty()) foundResult.exceptionOrNull()?.let { throw it }   // show the real error instead of "No results"
-        val found = foundResult.getOrDefault(emptyList())
+        val found = listOf(false, true).flatMap { nzb ->
+            runCatching {
+                val path = if (nzb) "usenet/search" else "torrents/search"
+                val o = call(Request.Builder().url("$searchBase/$path/${enc("$query audiobook")}?metadata=false&check_cache=true&check_owned=true"))
+                val data = o["data"] as? JsonObject
+                val arr = (data?.get(if (nzb) "nzbs" else "torrents") as? JsonArray) ?: JsonArray(emptyList())
+                arr.mapNotNull { it as? JsonObject }.mapNotNull { t ->
+                    val title = t.str("raw_title") ?: t.str("title") ?: return@mapNotNull null
+                    val hash = t.str("hash")?.lowercase() ?: return@mapNotNull null
+                    val link = if (nzb) (t.str("nzb") ?: t.str("link") ?: return@mapNotNull null) else null
+                    if (!SourceParser.isAudiobook(title)) return@mapNotNull null
+                    SourceResult("${if (nzb) "us" else "ts"}:$hash", Provider.TORBOX_SEARCH, title, t.lng("size"), SourceParser.parseCodec(title),
+                        SourceParser.parseBitrate(title), t.lng("last_known_seeders").toInt(),
+                        (t["cached"] as? JsonPrimitive)?.booleanOrNull ?: false, hash, null, null, nzb, link)
+                }
+            }.getOrElse { errors += "TorBox ${if (nzb) "usenet" else "torrent"} search: ${it.message}"; emptyList() }
+        }
         val mineHashes = mine.mapNotNull { it.hash }.toSet()
-        return mine + found.filter { it.hash !in mineHashes }
+        return (mine + found.filter { it.hash !in mineHashes }) to errors
     }
 
-    /** Adds the magnet to the account if needed and returns the torrent with its file list. */
-    fun ensureInAccount(hash: String, title: String): TorBoxTorrent {
-        val existing = myList().firstOrNull { it.hash == hash.lowercase() }
+    /** Adds the torrent/NZB to the account if needed and returns it with its file list. */
+    fun ensureInAccount(hash: String, title: String, usenet: Boolean = false, nzbUrl: String? = null): TorBoxTorrent {
+        val existing = myList(usenet).firstOrNull { it.hash == hash.lowercase() }
         if (existing?.files?.isNotEmpty() == true) return existing
         if (existing == null) {
-            val form = FormBody.Builder().add("magnet", "magnet:?xt=urn:btih:$hash&dn=${enc(title)}").add("seed", "3").build()
-            call(Request.Builder().url("$base/torrents/createtorrent").post(form))
+            if (usenet) {
+                val form = FormBody.Builder().add("link", nzbUrl ?: error("No NZB link for this result")).add("name", title).build()
+                call(Request.Builder().url("$base/usenet/createusenetdownload").post(form))
+            } else {
+                val form = FormBody.Builder().add("magnet", "magnet:?xt=urn:btih:$hash&dn=${enc(title)}").add("seed", "3").build()
+                call(Request.Builder().url("$base/torrents/createtorrent").post(form))
+            }
         }
         repeat(10) {
-            myList().firstOrNull { it.hash == hash.lowercase() && it.files.isNotEmpty() }?.let { return it }
+            myList(usenet).firstOrNull { it.hash == hash.lowercase() && it.files.isNotEmpty() }?.let { return it }
             Thread.sleep(1500)
         }
-        error("TorBox is still preparing this torrent. Try again in a minute.")
+        error("TorBox is still preparing this ${if (usenet) "usenet download" else "torrent"}. Try again in a minute.")
     }
+
+    /** Turns a torbox://id/fileId[?u=1] track address into a short-lived CDN link. */
+    fun resolve(uri: android.net.Uri): String =
+        requestLink(uri.host!!.toLong(), uri.pathSegments[0].toLong(), uri.getQueryParameter("u") == "1")
 
     /** Short-lived direct CDN link for one file. */
-    fun requestLink(torrentId: Long, fileId: Long): String {
-        val url = "$base/torrents/requestdl?token=${enc(key())}&torrent_id=$torrentId&file_id=$fileId&zip_link=false"
+    fun requestLink(id: Long, fileId: Long, usenet: Boolean = false): String {
+        val url = if (usenet) "$base/usenet/requestdl?token=${enc(key())}&usenet_id=$id&file_id=$fileId&zip_link=false"
+                  else "$base/torrents/requestdl?token=${enc(key())}&torrent_id=$id&file_id=$fileId&zip_link=false"
         return call(Request.Builder().url(url))["data"]?.jsonPrimitive?.contentOrNull ?: error("No download link")
-    }
-}
-
-class AioStreamsClient(private val http: OkHttpClient, private val manifestUrl: () -> String) {
-    private fun get(url: String): JsonObject =
-        http.newCall(Request.Builder().url(url).build()).execute().use {
-            if (!it.isSuccessful) error("AIOStreams ${it.code}")
-            Json.parseToJsonElement(it.body?.string().orEmpty()).jsonObject
-        }
-
-    /** Stremio protocol: search catalogs from the manifest, then fetch streams for the top hits. */
-    fun search(query: String): List<SourceResult> {
-        val mUrl = manifestUrl().ifBlank { return emptyList() }
-        val base = mUrl.removeSuffix("/manifest.json").trimEnd('/')
-        val catalogs = (get("$base/manifest.json")["catalogs"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
-            .filter { c -> (c["extra"] as? JsonArray).orEmpty().any { (it as? JsonObject)?.str("name") == "search" } }
-        val metas = catalogs.take(3).flatMap { c ->
-            runCatching {
-                val m = get("$base/catalog/${c.str("type")}/${c.str("id")}/search=${enc(query)}.json")["metas"] as? JsonArray
-                m.orEmpty().mapNotNull { it as? JsonObject }.take(3).map { c.str("type")!! to it.str("id")!! }
-            }.getOrDefault(emptyList())
-        }.distinct().take(5)
-        return metas.flatMap { (type, id) ->
-            runCatching {
-                (get("$base/stream/$type/${enc(id)}.json")["streams"] as? JsonArray).orEmpty()
-                    .mapNotNull { it as? JsonObject }.mapIndexedNotNull { i, s -> toResult(id, i, s) }
-            }.getOrDefault(emptyList())
-        }
-    }
-
-    private fun toResult(id: String, i: Int, s: JsonObject): SourceResult? {
-        val text = listOfNotNull(s.str("name"), s.str("title"), s.str("description")).joinToString(" ")
-        val hints = s["behaviorHints"] as? JsonObject
-        val size = hints?.lng("videoSize")?.takeIf { it > 0 } ?: SourceParser.parseSize(text)
-        val url = s.str("url")
-        val hash = s.str("infoHash")?.lowercase()
-        if (url == null && hash == null) return null
-        if (!SourceParser.isAudiobook(text + " " + (hints?.str("filename") ?: ""))) return null
-        val title = hints?.str("filename") ?: text.lineSequence().firstOrNull { it.isNotBlank() } ?: id
-        return SourceResult("aio:$id:$i", Provider.AIOSTREAMS, title, size, SourceParser.parseCodec(text),
-            SourceParser.parseBitrate(text), SourceParser.parseSeeders(text),
-            text.contains("⚡") || text.contains("cached", true), hash, url)
     }
 }

@@ -40,8 +40,7 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                 if (t.localPath != null && File(t.localPath).exists()) continue
                 runCatching { setForeground(foreground("$title (${n + 1}/${all.size})")) }
                 val url = if (t.remoteUrl.startsWith("torbox://")) {
-                    val u = android.net.Uri.parse(t.remoteUrl)
-                    torbox.requestLink(u.host!!.toLong(), u.pathSegments[0].toLong())
+                    torbox.resolve(android.net.Uri.parse(t.remoteUrl))
                 } else t.remoteUrl
                 val ext = t.title.substringAfterLast('.', "").takeIf { isAudioFile("x.$it") } ?: "mp3"
                 val out = File(dir, "${t.idx}.$ext")
