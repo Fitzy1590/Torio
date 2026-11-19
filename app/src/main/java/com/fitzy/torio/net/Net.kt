@@ -95,7 +95,7 @@ class TorBoxApiClient(private val http: OkHttpClient, private val key: () -> Str
     }
 
     fun myList(usenet: Boolean = false): List<TorBoxTorrent> {
-        val arr = call(Request.Builder().url("$base/${if (usenet) "usenet" else "torrents"}/mylist"))["data"] as? JsonArray ?: return emptyList()
+        val arr = call(Request.Builder().url("$base/${if (usenet) "usenet" else "torrents"}/mylist?bypass_cache=true"))["data"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { it as? JsonObject }.map { o ->
             TorBoxTorrent(
                 o.lng("id"), o.str("name") ?: "", (o.str("hash") ?: "").lowercase(), o.lng("size"),

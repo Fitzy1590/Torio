@@ -46,3 +46,6 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [x] On launch the app checks the latest GitHub release (tag build-N), downloads the APK and opens the Android installer (Android always asks you to confirm; first time it also asks to allow installs from Torio)
 - [x] Settings: "Auto-update on launch" switch, "Check for updates", "View on GitHub", current build number. Not device-tested.
 - Note: builds made before this have a different signing key; uninstall once, then install the first new build. Updates work from then on.
+
+## Fix (cached torrent "still preparing")
+- [x] `mylist` now sent with `bypass_cache=true`, so the add-then-wait loop sees the new torrent instead of a stale cached list. Not built here (no Android SDK in this sandbox) and not device-tested.
