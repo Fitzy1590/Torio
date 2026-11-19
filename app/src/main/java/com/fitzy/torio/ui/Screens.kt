@@ -67,6 +67,8 @@ fun TorioRoot(vm: TorioViewModel) {
 private fun MiniPlayer(p: com.fitzy.torio.player.PlayerUi, vm: TorioViewModel, open: () -> Unit) {
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (p.coverUrl != null) AsyncImage(p.coverUrl, "Cover", contentScale = ContentScale.Crop,
+                modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small))
             TextButton(onClick = open, modifier = Modifier.weight(1f)) {
                 Text(p.title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
             }

@@ -3,6 +3,7 @@ package com.fitzy.torio.net
 import com.fitzy.torio.AppContainer
 import com.fitzy.torio.data.BookEntity
 import com.fitzy.torio.data.TrackEntity
+import kotlinx.serialization.json.*
 
 /** Turns a picked source into a saved book with playable tracks. Blocking: call from Dispatchers.IO. */
 class BookRepository(private val c: AppContainer) {
@@ -32,10 +33,27 @@ class BookRepository(private val c: AppContainer) {
             }
         }
         if (tracks.isEmpty()) error("No audio files found in this source")
-        dao.upsertBook(BookEntity(id, cleanTitle(s.title), "", null, s.codec, s.bitrateKbps, s.sizeBytes))
+        val title = cleanTitle(s.title)
+        val (author, cover) = lookupCover(title)
+        dao.upsertBook(BookEntity(id, title, author, cover, s.codec, s.bitrateKbps, s.sizeBytes))
         dao.upsertTracks(tracks)
         return id
     }
+
+    /** Best-effort author + cover from Open Library (title only is sent). Returns "" / null on any failure. */
+    private fun lookupCover(title: String): Pair<String, String?> = runCatching {
+        val q = title.replace(Regex("""[\[(].*?[\])]"""), " ")
+            .replace(Regex("""(?i)\b(unabridged|abridged|audiobook|fully chaptered|m4b|mp3|flac)\b"""), " ")
+            .replace(Regex("""\s+"""), " ").trim()
+        val url = "https://openlibrary.org/search.json?limit=1&fields=cover_i,author_name&q=" + java.net.URLEncoder.encode(q, "UTF-8")
+        val doc = c.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use {
+            if (!it.isSuccessful) return@runCatching "" to null
+            kotlinx.serialization.json.Json.parseToJsonElement(it.body?.string().orEmpty()).jsonObject["docs"]?.jsonArray?.firstOrNull()?.jsonObject
+        }
+        val author = doc?.get("author_name")?.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull.orEmpty()
+        val cover = doc?.get("cover_i")?.jsonPrimitive?.longOrNull?.let { "https://covers.openlibrary.org/b/id/$it-L.jpg" }
+        author to cover
+    }.getOrDefault("" to null)
 
     private fun naturalOrder() = Comparator<TorBoxFile> { a, b -> collate(a.name, b.name) }
     private fun collate(a: String, b: String): Int {
