@@ -38,7 +38,7 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 ## Done (v0.2.2)
 - [x] Library: tapping a book card opens the Player; if it is already loaded it is not reloaded
 - [x] Artwork: lookup now tries iTunes audiobooks then Open Library with cleaned title variants (drops "Chapterized", "Easier Listen" etc.); old books without a cover are retried at launch; covers shown on Library cards. Not device-tested.
-- [ ] Some sources fail to stream but download fine: cause not yet found (need the on-screen error)
+- [ ] Some sources fail to stream but download fine: on-screen errors seen: "No audio files found in this source" and "TorBox is still preparing". Fix (not device-tested): the wait loop now reads mylist with bypass_cache and the new torrent's id; cloud items are matched by TorBox id, not hash; the "no audio" error now lists the files it saw.
 
 ## Done (v0.3.0, auto-update)
 - [x] Every build is signed with one fixed key (app/torio-update.keystore, committed on purpose) and versionCode = CI run number
