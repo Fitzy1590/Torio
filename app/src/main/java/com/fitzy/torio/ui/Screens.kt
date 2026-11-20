@@ -182,12 +182,14 @@ private fun PlayerScreen(vm: TorioViewModel) {
     var drawer by remember { mutableStateOf(false) }
     var drag by remember { mutableStateOf<Float?>(null) }
     if (p.bookId == null) { Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Pick a book from Search or Library") }; return }
-    Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(Modifier.size(240.dp).clip(RoundedCornerShape(16.dp)), tonalElevation = 4.dp) {
-            if (p.coverUrl != null) AsyncImage(p.coverUrl, "Cover", contentScale = ContentScale.Crop)
-            else Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Headphones, null, Modifier.size(96.dp)) }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+            Surface(Modifier.fillMaxHeight().aspectRatio(1f, matchHeightConstraintsFirst = false).clip(RoundedCornerShape(20.dp)), tonalElevation = 4.dp) {
+                if (p.coverUrl != null) AsyncImage(p.coverUrl, "Cover", contentScale = ContentScale.Crop)
+                else Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Headphones, null, Modifier.size(96.dp)) }
+            }
         }
-        Text(p.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 16.dp))
+        Text(p.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
         p.trackTitles.getOrNull(p.trackIndex)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         val max = p.durationMs.coerceAtLeast(1).toFloat()
         Slider(drag ?: p.positionMs.toFloat(), { drag = it }, valueRange = 0f..max,
@@ -203,14 +205,16 @@ private fun PlayerScreen(vm: TorioViewModel) {
             IconButton({ vm.player.skip(30_000) }) { Icon(Icons.Default.Forward30, "Forward 30 seconds", Modifier.size(36.dp)) }
         }
         Text("Speed ${"%.1f".format(p.speed)}x", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.labelLarge)
-        Slider(p.speed, { vm.player.setSpeed(it) }, valueRange = 0.5f..3.5f, steps = 29)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(listOf(0.8f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)) { s ->
                 FilterChip(Math.abs(p.speed - s) < 0.05f, { vm.player.setSpeed(s) }, { Text("${s}x") })
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Voice clarity DSP", Modifier.weight(1f)); Switch(p.dsp, { vm.player.setDsp(it) })
+            Text("Voice clarity", Modifier.weight(1f)); Switch(p.dsp, { vm.player.setDsp(it) })
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Skip silence", Modifier.weight(1f)); Switch(p.skipSilence, { vm.player.setSkipSilence(it) })
         }
         OutlinedButton({ drawer = true }) { Icon(Icons.Default.List, null); Text(" Chapters (${p.trackTitles.size})") }
     }

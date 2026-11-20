@@ -25,6 +25,7 @@ data class PlayerUi(
     val durationMs: Long = 0,
     val speed: Float = 1f,
     val dsp: Boolean = true,
+    val skipSilence: Boolean = false,
 )
 
 /** UI-side handle to the service's player. All UI state flows from here. */
@@ -32,7 +33,7 @@ class PlayerConnection(private val ctx: Context, private val c: AppContainer) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: MediaController? = null
     private val pending = mutableListOf<(MediaController) -> Unit>()
-    private val _ui = MutableStateFlow(PlayerUi(speed = c.settings.speed, dsp = c.settings.dspOn))
+    private val _ui = MutableStateFlow(PlayerUi(speed = c.settings.speed, dsp = c.settings.dspOn, skipSilence = c.settings.skipSilence))
     val ui = _ui.asStateFlow()
     private var meta = Triple("", "", null as String?)
     private var titles = emptyList<String>()
@@ -84,6 +85,7 @@ class PlayerConnection(private val ctx: Context, private val c: AppContainer) {
         withController { mc ->
             mc.setMediaItems(items, idx.coerceIn(0, items.lastIndex), pos)
             mc.setPlaybackParameters(PlaybackParameters(c.settings.speed, 1f))
+            mc.sendCustomCommand(SILENCE_CMD, android.os.Bundle().apply { putBoolean("on", c.settings.skipSilence) })
             mc.prepare(); mc.playWhenReady = play
         }
         c.settings.lastBookId = id
@@ -115,7 +117,14 @@ class PlayerConnection(private val ctx: Context, private val c: AppContainer) {
         withController { it.sendCustomCommand(DSP_CMD, android.os.Bundle().apply { putBoolean("on", on) }) }
     }
 
+    fun setSkipSilence(on: Boolean) {
+        c.settings.skipSilence = on
+        _ui.value = _ui.value.copy(skipSilence = on)
+        withController { it.sendCustomCommand(SILENCE_CMD, android.os.Bundle().apply { putBoolean("on", on) }) }
+    }
+
     companion object {
+        val SILENCE_CMD = androidx.media3.session.SessionCommand("torio.silence", android.os.Bundle.EMPTY)
         val DSP_CMD = androidx.media3.session.SessionCommand("torio.dsp", android.os.Bundle.EMPTY)
     }
 }

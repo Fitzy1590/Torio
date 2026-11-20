@@ -54,15 +54,17 @@ class Media3AudioService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
+        player.skipSilenceEnabled = c.settings.skipSilence
         player.setPlaybackParameters(PlaybackParameters(c.settings.speed, 1f))  // pitch stays 1 = pitch-preserved
         session = MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
             override fun onConnect(s: MediaSession, ctl: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
-                val cmds = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon().add(PlayerConnection.DSP_CMD).build()
+                val cmds = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon().add(PlayerConnection.DSP_CMD).add(PlayerConnection.SILENCE_CMD).build()
                 return MediaSession.ConnectionResult.accept(cmds, MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS)
             }
             override fun onCustomCommand(s: MediaSession, ctl: MediaSession.ControllerInfo, cmd: androidx.media3.session.SessionCommand, args: android.os.Bundle):
                 com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.SessionResult> {
                 if (cmd.customAction == "torio.dsp") dsp.setEnabled(args.getBoolean("on", true))
+                if (cmd.customAction == "torio.silence") player.skipSilenceEnabled = args.getBoolean("on", false)
                 return com.google.common.util.concurrent.Futures.immediateFuture(androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS))
             }
         }).build()

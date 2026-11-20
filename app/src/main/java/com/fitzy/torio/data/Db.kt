@@ -110,6 +110,9 @@ class Settings(ctx: Context) {
     var dspOn: Boolean
         get() = sp.getBoolean("dsp", true)
         set(v) = sp.edit().putBoolean("dsp", v).apply()
+    var skipSilence: Boolean
+        get() = sp.getBoolean("skip_silence", false)
+        set(v) = sp.edit().putBoolean("skip_silence", v).apply()
     var autoResume: Boolean
         get() = sp.getBoolean("auto_resume", true)
         set(v) = sp.edit().putBoolean("auto_resume", v).apply()

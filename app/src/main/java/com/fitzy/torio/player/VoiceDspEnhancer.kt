@@ -31,7 +31,7 @@ class VoiceDspEnhancer {
                 if (on) applyVoiceCurve(e)
                 e.enabled = on
             }
-            loud?.apply { setTargetGain(if (on) 400 else 0); enabled = on }
+            loud?.apply { setTargetGain(if (on) 500 else 0); enabled = on }
             dyn?.enabled = on
         }
     }
@@ -42,9 +42,10 @@ class VoiceDspEnhancer {
         for (b in 0 until e.numberOfBands) {
             val hz = e.getCenterFreq(b.toShort()) / 1000
             val gain = when {
-                hz < 90 -> -600          // rumble
-                hz < 250 -> -200         // mud
-                hz in 1000..4500 -> 450  // speech presence
+                hz < 90 -> -800          // rumble
+                hz < 250 -> -300         // mud
+                hz in 1000..2500 -> 500  // intelligibility
+                hz in 2501..5000 -> 600  // consonant clarity / sibilance edge
                 hz > 8000 -> 100         // air
                 else -> 0
             }
@@ -63,7 +64,7 @@ class VoiceDspEnhancer {
                 band.isEnabled = true
                 band.cutoffFrequency = 20000f
                 band.attackTime = 20f; band.releaseTime = 250f
-                band.ratio = 3f; band.threshold = -32f; band.kneeWidth = 6f
+                band.ratio = 3.5f; band.threshold = -34f; band.kneeWidth = 6f
                 band.postGain = 5f   // make up for the squeezed peaks
                 d.setMbcBandByChannelIndex(ch, 0, band)
             }

@@ -49,3 +49,9 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 
 ## Fix (cached torrent "still preparing")
 - [x] `mylist` now sent with `bypass_cache=true`, so the add-then-wait loop sees the new torrent instead of a stale cached list. Not built here (no Android SDK in this sandbox) and not device-tested.
+
+## Done (player layout + voice clarity + skip silence)
+- [x] Player: artwork fills the free space; title, seek bar, controls, speed chips and toggles sit at the bottom (big speed slider removed, chips kept)
+- [x] Voice clarity DSP: deeper rumble/mud cut, stronger 1-5 kHz lift, slightly firmer compression and loudness
+- [x] "Skip silence" toggle (off by default, saved in Settings, uses ExoPlayer's built-in silence skipping)
+- [ ] Not built here (no Android SDK in this sandbox) and not device-tested; CI build will confirm
