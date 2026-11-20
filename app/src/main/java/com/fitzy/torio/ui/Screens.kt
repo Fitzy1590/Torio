@@ -251,7 +251,7 @@ private fun SettingsScreen(vm: TorioViewModel) {
         Text("Torio build ${com.fitzy.torio.net.Updater.currentBuild(ctx)}", style = MaterialTheme.typography.bodySmall)
         when (val u = upd) {
             is UpdateState.Checking -> Text("Checking for updates...")
-            is UpdateState.UpToDate -> Text("You're on the latest build.")
+            is UpdateState.UpToDate -> Text("You're on the latest build." + (u.latest?.let { " (GitHub latest: build $it)" } ?: " (no release found on GitHub)"))
             is UpdateState.Downloading -> Text("Downloading build ${u.info.build}...")
             is UpdateState.Failed -> Text(u.message, color = MaterialTheme.colorScheme.error)
             is UpdateState.Available -> {

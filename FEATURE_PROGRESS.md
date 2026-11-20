@@ -55,3 +55,6 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 - [x] Voice clarity DSP: deeper rumble/mud cut, stronger 1-5 kHz lift, slightly firmer compression and loudness
 - [x] "Skip silence" toggle (off by default, saved in Settings, uses ExoPlayer's built-in silence skipping)
 - [ ] Not built here (no Android SDK in this sandbox) and not device-tested; CI build will confirm
+
+## Fix (updater said "latest" when build 20 was out)
+- [x] Updater now reads the release list (no-cache) instead of /releases/latest, and Settings shows "GitHub latest: build N" so a wrong answer is visible. Not built here; CI will confirm.

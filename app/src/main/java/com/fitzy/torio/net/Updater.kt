@@ -21,20 +21,20 @@ object Updater {
     fun currentBuild(ctx: Context): Int =
         ctx.packageManager.getPackageInfo(ctx.packageName, 0).longVersionCode.toInt()
 
-    /** Returns the newer release, or null when this build is current. Throws on network errors. */
-    suspend fun check(http: OkHttpClient, current: Int): UpdateInfo? = withContext(Dispatchers.IO) {
-        val req = Request.Builder().url("https://api.github.com/repos/Fitzy1590/Torio/releases/latest")
-            .header("Accept", "application/vnd.github+json").build()
+    /** Returns the newest published (non-pre-release) build that has an APK, or null if none. Throws on network errors. */
+    suspend fun latest(http: OkHttpClient): UpdateInfo? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("https://api.github.com/repos/Fitzy1590/Torio/releases?per_page=15")
+            .header("Accept", "application/vnd.github+json").header("Cache-Control", "no-cache").build()
         http.newCall(req).execute().use { r ->
-            if (r.code == 404) return@withContext null
             if (!r.isSuccessful) error("GitHub returned ${r.code}")
-            val o = Json.parseToJsonElement(r.body!!.string()).jsonObject
-            val build = o["tag_name"]?.jsonPrimitive?.content?.removePrefix("build-")?.toIntOrNull() ?: return@withContext null
-            if (build <= current) return@withContext null
-            val apk = o["assets"]?.jsonArray?.map { it.jsonObject }
-                ?.firstOrNull { it["name"]?.jsonPrimitive?.content?.endsWith(".apk") == true }
-                ?.get("browser_download_url")?.jsonPrimitive?.content ?: return@withContext null
-            UpdateInfo(build, apk, o["html_url"]?.jsonPrimitive?.content ?: RELEASES_PAGE)
+            Json.parseToJsonElement(r.body!!.string()).jsonArray.map { it.jsonObject }.mapNotNull { o ->
+                if (o["prerelease"]?.jsonPrimitive?.booleanOrNull == true || o["draft"]?.jsonPrimitive?.booleanOrNull == true) return@mapNotNull null
+                val build = o["tag_name"]?.jsonPrimitive?.content?.removePrefix("build-")?.toIntOrNull() ?: return@mapNotNull null
+                val apk = o["assets"]?.jsonArray?.map { it.jsonObject }
+                    ?.firstOrNull { it["name"]?.jsonPrimitive?.content?.endsWith(".apk") == true }
+                    ?.get("browser_download_url")?.jsonPrimitive?.content ?: return@mapNotNull null
+                UpdateInfo(build, apk, o["html_url"]?.jsonPrimitive?.content ?: RELEASES_PAGE)
+            }.maxByOrNull { it.build }
         }
     }
 

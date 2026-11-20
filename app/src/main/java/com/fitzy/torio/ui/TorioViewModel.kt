@@ -28,7 +28,7 @@ data class SearchState(
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
-    data object UpToDate : UpdateState
+    data class UpToDate(val latest: Int? = null) : UpdateState
     data class Available(val info: com.fitzy.torio.net.UpdateInfo, val note: String? = null) : UpdateState
     data class Downloading(val info: com.fitzy.torio.net.UpdateInfo) : UpdateState
     data class Ready(val info: com.fitzy.torio.net.UpdateInfo, val file: File) : UpdateState
@@ -56,8 +56,8 @@ class TorioViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _update.value = UpdateState.Checking
             try {
-                val info = com.fitzy.torio.net.Updater.check(c.http, com.fitzy.torio.net.Updater.currentBuild(getApplication()))
-                if (info == null) _update.value = UpdateState.UpToDate
+                val info = com.fitzy.torio.net.Updater.latest(c.http)
+                if (info == null || info.build <= com.fitzy.torio.net.Updater.currentBuild(getApplication())) _update.value = UpdateState.UpToDate(info?.build)
                 else if (auto) downloadUpdate(info) else _update.value = UpdateState.Available(info)
             } catch (e: Exception) {
                 _update.value = UpdateState.Failed(e.message ?: "Update check failed")
