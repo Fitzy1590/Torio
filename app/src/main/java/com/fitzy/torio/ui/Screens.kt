@@ -210,7 +210,8 @@ private fun PlayerScreen(vm: TorioViewModel) {
             }
             IconButton({ vm.player.skip(30_000) }) { Icon(Icons.Default.Forward30, "Forward 30 seconds", Modifier.size(36.dp)) }
         }
-        Text("Speed ${"%.1f".format(p.speed)}x", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.labelLarge)
+        Text("Speed ${"%.2f".format(p.speed).trimEnd('0').trimEnd('.')}x", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.labelLarge)
+        Slider(p.speed, { vm.player.setSpeed(it) }, valueRange = 0.5f..3.5f, steps = 59)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(listOf(0.8f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)) { s ->
                 FilterChip(Math.abs(p.speed - s) < 0.05f, { vm.player.setSpeed(s) }, { Text("${s}x") })

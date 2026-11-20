@@ -106,7 +106,7 @@ class PlayerConnection(private val ctx: Context, private val c: AppContainer) {
     fun skip(deltaMs: Long) = withController { it.seekTo((it.currentPosition + deltaMs).coerceAtLeast(0)) }
     fun selectTrack(i: Int) = withController { it.seekTo(i, 0) }
     fun setSpeed(s: Float) {
-        val v = (Math.round(s * 10) / 10f).coerceIn(0.5f, 3.5f)
+        val v = (Math.round(s * 20) / 20f).coerceIn(0.5f, 3.5f)
         c.settings.speed = v
         withController { it.setPlaybackParameters(PlaybackParameters(v, 1f)) }
     }
