@@ -47,6 +47,8 @@ class TorioViewModel(app: Application) : AndroidViewModel(app) {
     val progress: StateFlow<Map<String, ProgressEntity>> =
         c.db.progressDao().all().map { l -> l.associateBy { it.bookId } }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    val downloads = c.downloads.asStateFlow()
+
     private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val update = _update.asStateFlow()
 
@@ -106,6 +108,19 @@ class TorioViewModel(app: Application) : AndroidViewModel(app) {
                 val id = withContext(Dispatchers.IO) { repo.saveSource(s) }
                 if (stream) { player.open(id, play = true); onStarted() }
                 else { DownloadWorker.enqueue(getApplication(), id); _search.value = _search.value.copy(messages = listOf("Download started. Find it in Library.")) }
+            } catch (e: Exception) {
+                _search.value = _search.value.copy(messages = listOf(e.message ?: "Failed"))
+            } finally { _search.value = _search.value.copy(busyId = null) }
+        }
+    }
+
+    /** Saves a search result to the Library without streaming or downloading. */
+    fun saveForLater(s: SourceResult) {
+        _search.value = _search.value.copy(busyId = s.id, messages = emptyList())
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { repo.saveSource(s) }
+                _search.value = _search.value.copy(messages = listOf("Added to Library."))
             } catch (e: Exception) {
                 _search.value = _search.value.copy(messages = listOf(e.message ?: "Failed"))
             } finally { _search.value = _search.value.copy(busyId = null) }

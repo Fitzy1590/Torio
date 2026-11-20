@@ -58,3 +58,8 @@ Vote: [x] Option A (Full Native Torio Engine). Build env: ANDROID_HOME=/opt/andr
 
 ## Fix (updater said "latest" when build 20 was out)
 - [x] Updater now reads the release list (no-cache) instead of /releases/latest, and Settings shows "GitHub latest: build N" so a wrong answer is visible. Not built here; CI will confirm.
+
+## Done (download progress + Add to library)
+- [x] Download notification shows a progress bar and percent; Library cards show "Downloading N%" with a progress bar while a download runs (state in `AppContainer.downloads`)
+- [x] Search results have an "Add to library" button: saves the book (adds it to TorBox) without streaming or downloading
+- [ ] Not built here (no Android SDK in this sandbox) and not device-tested; CI build will confirm

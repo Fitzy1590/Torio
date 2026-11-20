@@ -13,6 +13,8 @@ class AppContainer(app: Application) {
         .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
         .build()
     val sync: SyncRepository = LocalSyncRepository(db.progressDao())
+    /** bookId -> download percent (0-100) while a download is running. */
+    val downloads = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Int>>(emptyMap())
 }
 
 class TorioApp : Application() {

@@ -98,13 +98,14 @@ private fun SearchScreen(vm: TorioViewModel, goPlayer: () -> Unit) {
         s.messages.forEach { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         LazyColumn(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(s.results, key = { it.id }) { r -> SourceCard(r, busy = s.busyId == r.id,
-                onStream = { vm.pick(r, true, goPlayer) }, onDownload = { vm.pick(r, false) {} }) }
+                onStream = { vm.pick(r, true, goPlayer) }, onDownload = { vm.pick(r, false) {} }, onSave = { vm.saveForLater(r) }) }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onDownload: () -> Unit) {
+private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onDownload: () -> Unit, onSave: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -116,10 +117,11 @@ private fun SourceCard(r: SourceResult, busy: Boolean, onStream: () -> Unit, onD
             val rate = if (r.bitrateKbps > 0) " | ${r.bitrateKbps}kbps" else ""
             val health = when { r.provider == Provider.TORBOX_CLOUD -> "In your cloud"; r.cached -> "Instant"; r.seeders > 0 -> "${r.seeders} seeds"; else -> "Direct" }
             Text("${r.codec} | ${formatSize(r.sizeBytes)}$rate | $health", style = MaterialTheme.typography.bodySmall)
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (busy) CircularProgressIndicator(Modifier.size(32.dp)) else {
                     Button(onStream) { Icon(Icons.Default.Bolt, null); Spacer(Modifier.width(4.dp)); Text("Stream Live") }
                     OutlinedButton(onDownload) { Icon(Icons.Default.Download, null); Spacer(Modifier.width(4.dp)); Text("Download") }
+                    OutlinedButton(onSave) { Icon(Icons.Default.BookmarkAdd, null); Spacer(Modifier.width(4.dp)); Text("Add to library") }
                 }
             }
         }
@@ -131,6 +133,7 @@ private fun LibraryScreen(vm: TorioViewModel, goPlayer: () -> Unit) {
     val books by vm.books.collectAsStateWithLifecycle()
     val prog by vm.progress.collectAsStateWithLifecycle()
     val cur by vm.player.ui.collectAsStateWithLifecycle()
+    val dl by vm.downloads.collectAsStateWithLifecycle()
     var section by remember { mutableIntStateOf(0) }
     val names = listOf("In progress", "Downloaded", "Finished")
     val shown = books.filter { b ->
@@ -153,7 +156,10 @@ private fun LibraryScreen(vm: TorioViewModel, goPlayer: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text(b.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                         Text("${b.codec} | ${formatSize(b.sizeBytes)}" + if (b.downloaded) " | Offline" else " | Streaming", style = MaterialTheme.typography.bodySmall)
-                        if (p != null) LinearProgressIndicator(progress = { p.percent / 100f }, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                        dl[b.id]?.let { d ->
+                            Text("Downloading $d%", style = MaterialTheme.typography.labelSmall)
+                            LinearProgressIndicator(progress = { d / 100f }, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                        } ?: if (p != null) LinearProgressIndicator(progress = { p.percent / 100f }, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) else Unit
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                             FilledTonalButton({ vm.play(b); goPlayer() }) {
                                 Icon(if (cur.bookId == b.id && cur.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null)

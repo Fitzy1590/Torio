@@ -15,11 +15,12 @@ import java.io.File
 
 /** Downloads every track of a book into app storage and flips the book to "downloaded". */
 class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
-    private fun foreground(text: String): ForegroundInfo {
+    private fun foreground(text: String, pct: Int = -1): ForegroundInfo {
         val nm = applicationContext.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW))
         val n = NotificationCompat.Builder(applicationContext, CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Torio download").setContentText(text).setOngoing(true).setOnlyAlertOnce(true).build()
+            .setContentTitle("Torio download").setContentText(if (pct >= 0) "$text · $pct%" else text).setOngoing(true).setOnlyAlertOnce(true)
+            .apply { if (pct >= 0) setProgress(100, pct, false) else setProgress(100, 0, true) }.build()
         val id = (inputData.getString("bookId") ?: "").hashCode()
         return if (Build.VERSION.SDK_INT >= 29) ForegroundInfo(id, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else ForegroundInfo(id, n)
     }
@@ -38,7 +39,13 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             val all = dao.tracks(bookId)
             for ((n, t) in all.withIndex()) {
                 if (t.localPath != null && File(t.localPath).exists()) continue
-                runCatching { setForeground(foreground("$title (${n + 1}/${all.size})")) }
+                val label = "$title (${n + 1}/${all.size})"
+                fun report(frac: Float) {
+                    val pct = (((n + frac) / all.size) * 100).toInt().coerceIn(0, 100)
+                    c.downloads.value = c.downloads.value + (bookId to pct)
+                }
+                report(0f)
+                runCatching { setForeground(foreground(label, ((n.toFloat() / all.size) * 100).toInt())) }
                 val url = if (t.remoteUrl.startsWith("torbox://")) {
                     torbox.resolve(android.net.Uri.parse(t.remoteUrl))
                 } else t.remoteUrl
@@ -46,7 +53,25 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                 val out = File(dir, "${t.idx}.$ext")
                 c.http.newCall(Request.Builder().url(url).build()).execute().use { r ->
                     if (!r.isSuccessful) error("HTTP ${r.code}")
-                    r.body!!.byteStream().use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+                    val total = r.body!!.contentLength()
+                    var done = 0L; var lastPct = -1; var lastAt = 0L
+                    r.body!!.byteStream().use { i -> out.outputStream().use { o ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val k = i.read(buf); if (k < 0) break
+                            o.write(buf, 0, k); done += k
+                            if (total > 0) {
+                                val frac = done.toFloat() / total
+                                report(frac)
+                                val pct = (((n + frac) / all.size) * 100).toInt()
+                                val now = System.currentTimeMillis()
+                                if (pct != lastPct && now - lastAt > 1000) {
+                                    lastPct = pct; lastAt = now
+                                    runCatching { setForeground(foreground(label, pct)) }
+                                }
+                            }
+                        }
+                    } }
                 }
                 dao.setLocalPath(bookId, t.idx, out.absolutePath)
             }
@@ -54,6 +79,8 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             Result.success()
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()
+        } finally {
+            c.downloads.value = c.downloads.value - bookId
         }
     }
 
